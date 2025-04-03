@@ -29,11 +29,27 @@
             <version>0.1.55</version>
         </dependency>
 
-        <!--使用dbus api操作firewall-->
+        <!--使用dbus api操作firewall, java 最低版本要求11-->
         <dependency>
             <groupId>com.github.hypfvieh</groupId>
             <artifactId>dbus-java-core</artifactId>
-            <version>5.1.1</version>
+            <version>4.3.2</version>
+        </dependency>
+
+        <!-- Linux UnixSocket传输 -->
+        <!-- https://mvnrepository.com/artifact/com.github.hypfvieh/dbus-java-transport-junixsocket -->
+        <dependency>
+            <groupId>com.github.hypfvieh</groupId>
+            <artifactId>dbus-java-transport-junixsocket</artifactId>
+            <version>4.3.2</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <!--lombok-->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.38</version>
+            <scope>provided</scope>
         </dependency>
 
     </dependencies>
