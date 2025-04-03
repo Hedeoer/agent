@@ -31,11 +31,35 @@ public class FirewallDRuleQuery {
 
 
     public FirewallDRuleQuery() {
+
         // 获取FirewallD连接
         try {
-            // 使用默认配置连接到系统总线（默认使用 EXTERNAL 身份验证）
-//            connection = DBusConnection.getConnection(DBusConnection.DBusBusType.SYSTEM);
-            connection = DBusConnectionBuilder.forSystemBus().build();
+
+            // 授权 firewalld操作
+            if (FirewallPolicyConfigurer.configureFirewallPolicy()) {
+                // 获取firewalld链接
+                connection = DBusConnectionBuilder.forSystemBus().build();
+            }
+        } catch (DBusException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 获取  DBusConnection
+     * @return  connection ；null标识获取失败
+     */
+    public static DBusConnection getDBusConnection(){
+        DBusConnection connection = null;
+        // 获取FirewallD连接
+        try {
+
+            // 授权 firewalld操作
+            if (FirewallPolicyConfigurer.configureFirewallPolicy()) {
+                // 获取firewalld链接
+                connection = DBusConnectionBuilder.forSystemBus().build();
+            }
+            return connection;
         } catch (DBusException e) {
             throw new RuntimeException(e);
         }

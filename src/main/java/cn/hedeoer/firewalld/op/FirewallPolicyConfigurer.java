@@ -1,5 +1,7 @@
 package cn.hedeoer.firewalld.op;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
@@ -7,15 +9,38 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
+ * 使用前置条件：
+ * <p>1. 用户拥有sudo权限才能完成配置</p>
+ * <p>2. 并且用户拥有免密sudo权限</p>
+ *
+ *
+ * 使用zt-exec 创建 polkit 规则文件来获取使用dbus api操作firewalld的权限
+ * <p>1. 检查用户（当前系统用户）是否已经拥有防火墙操作授权</p>
+ * <p>2. 对用户授权</p>
+ * <ul>
+ *     <li>2.1 创建 /etc/polkit-1/rules.d/90-firewalld-custom.rules文件</li>
+ *     <li>2.2 写入规则（假设当前用户为hedeoer）,对org.fedoraproject.FirewallD1所有请求放行</li>
+ * </ul>
+
+ * <pre>
+ *     polkit.addRule(function(action, subject) {
+ * if (action.id.indexOf("org.fedoraproject.FirewallD1") == 0 &&
+ *         subject.user == "hedeoer") {
+ *         return polkit.Result.YES;
+ *     }
+ * });
+ * </pre>
+ * <p>3. 验证授权是否生效</p>
  *
  */
 public class FirewallPolicyConfigurer {
+
+    private static final Logger logger = LoggerFactory.getLogger(FirewallPolicyConfigurer.class);
 
     private static final String POLKIT_RULES_DIR = "/etc/polkit-1/rules.d";
     private static final String CUSTOM_RULE_FILE = "90-firewalld-custom.rules";
@@ -29,40 +54,44 @@ public class FirewallPolicyConfigurer {
 
     /**
      * 配置防火墙授权策略
-     * @param username 要授权的用户名
      * @return 是否成功配置
      */
-    public static boolean configureFirewallPolicy(String username) {
+    public static boolean configureFirewallPolicy() {
         try {
             // 1. 检查当前用户
             String currentUser = getCurrentUser();
-            System.out.println("当前用户: " + currentUser);
-            
-            // 2. 创建策略文件内容
-            String policyContent = String.format(POLICY_TEMPLATE, username);
-            
-            // 3. 临时创建策略文件
-            Path tempPolicyFile = createTempPolicyFile(policyContent);
-            
-            // 4. 使用sudo移动文件到策略目录
-            boolean moveSuccess = movePolicyFileWithSudo(tempPolicyFile);
-            if (!moveSuccess) {
-                System.err.println("无法移动策略文件到 " + POLKIT_RULES_DIR);
-                return false;
+            logger.info("当前用户: {}",currentUser);
+            // 检查是否需要授权
+            if (!checkFirewallAuthorization()) {
+
+
+                // 2. 创建策略文件内容
+                String policyContent = String.format(POLICY_TEMPLATE, currentUser);
+
+                // 3. 临时创建策略文件
+                Path tempPolicyFile = createTempPolicyFile(policyContent);
+
+                // 4. 使用sudo移动文件到策略目录
+                boolean moveSuccess = movePolicyFileWithSudo(tempPolicyFile);
+                if (!moveSuccess) {
+                    logger.error("无法移动策略文件到 {}", POLKIT_RULES_DIR);
+                    return false;
+                }
+
+                // 5. 重启polkit服务
+                boolean restartSuccess = restartPolkitWithSudo();
+                if (!restartSuccess) {
+                    logger.error("无法重启 polkit 服务");
+                    return false;
+                }
+
+                logger.info("已成功为用户 '{}' 配置防火墙授权策略", currentUser);
             }
-            
-            // 5. 重启polkit服务
-            boolean restartSuccess = restartPolkitWithSudo();
-            if (!restartSuccess) {
-                System.err.println("无法重启 polkit 服务");
-                return false;
-            }
-            
-            System.out.println("已成功为用户 '" + username + "' 配置防火墙授权策略");
-            return true;
-            
+            // 检查授权是否成功
+            return checkFirewallAuthorization();
+
         } catch (Exception e) {
-            System.err.println("配置防火墙授权策略时发生错误: " + e.getMessage());
+            logger.error("配置防火墙授权策略时发生错误: {}", e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -71,7 +100,7 @@ public class FirewallPolicyConfigurer {
     /**
      * 获取当前系统用户名
      */
-    public static String getCurrentUser() {
+    private static String getCurrentUser() {
         return System.getProperty("user.name");
     }
     
@@ -114,7 +143,7 @@ public class FirewallPolicyConfigurer {
             
             return result.getExitValue() == 0;
         } catch (Exception e) {
-            System.err.println("移动策略文件失败: " + e.getMessage());
+            logger.error("移动策略文件失败: {}", e.getMessage());
             return false;
         }
     }
@@ -193,7 +222,7 @@ public class FirewallPolicyConfigurer {
             // 如果所有systemctl命令都失败，尝试手动重载规则
             return reloadPolkitRules();
         } catch (Exception e) {
-            System.err.println("重启polkit服务失败: " + e.getMessage());
+            logger.error("重启polkit服务失败: {}", e.getMessage());
             return false;
         }
     }
@@ -212,7 +241,7 @@ public class FirewallPolicyConfigurer {
             // 即使pkill返回非零值（可能找不到进程），也可能成功
             return true;
         } catch (Exception e) {
-            System.err.println("重载polkit规则失败: " + e.getMessage());
+            logger.error("重载polkit规则失败: {}", e.getMessage());
             return false;
         }
     }
@@ -220,7 +249,7 @@ public class FirewallPolicyConfigurer {
     /**
      * 检查当前用户是否已获得FirewallD授权
      */
-    public static boolean checkFirewallAuthorization() {
+    private static boolean checkFirewallAuthorization() {
         try {
             // 尝试执行一个简单的防火墙命令来测试授权
             ProcessResult result = new ProcessExecutor()
@@ -245,7 +274,7 @@ public class FirewallPolicyConfigurer {
         if (checkFirewallAuthorization()) {
             System.out.println("用户已经拥有防火墙操作授权，无需配置。");
         } else {
-            boolean success = configureFirewallPolicy(currentUser);
+            boolean success = configureFirewallPolicy();
             if (success) {
                 System.out.println("授权配置成功！");
                 
