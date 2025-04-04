@@ -1,0 +1,437 @@
+[hedeoer@vm79 jdk-11]$ gdbus introspect --system --dest org.fedoraproject.FirewallD1 --object-path /org/fedoraproject/FirewallD1
+node /org/fedoraproject/FirewallD1 {
+  interface org.fedoraproject.FirewallD1.direct {
+    methods:
+      queryPassthrough(in  s ipv,
+                       in  as args,
+                       out b arg_2);
+      addRule(in  s ipv,
+              in  s table,
+              in  s chain,
+              in  i priority,
+              in  as args);
+      passthrough(in  s ipv,
+                  in  as args,
+                  out s arg_2);
+      getAllPassthroughs(out a(sas) arg_0);
+      getAllChains(out a(sss) arg_0);
+      getPassthroughs(in  s ipv,
+                      out aas arg_1);
+      getRules(in  s ipv,
+               in  s table,
+               in  s chain,
+               out a(ias) arg_3);
+      getChains(in  s ipv,
+                in  s table,
+                out as arg_2);
+      addPassthrough(in  s ipv,
+                     in  as args);
+      queryChain(in  s ipv,
+                 in  s table,
+                 in  s chain,
+                 out b arg_3);
+      removePassthrough(in  s ipv,
+                        in  as args);
+      removeRules(in  s ipv,
+                  in  s table,
+                  in  s chain);
+      getAllRules(out a(sssias) arg_0);
+      removeRule(in  s ipv,
+                 in  s table,
+                 in  s chain,
+                 in  i priority,
+                 in  as args);
+      addChain(in  s ipv,
+               in  s table,
+               in  s chain);
+      removeChain(in  s ipv,
+                  in  s table,
+                  in  s chain);
+      queryRule(in  s ipv,
+                in  s table,
+                in  s chain,
+                in  i priority,
+                in  as args,
+                out b arg_5);
+      removeAllPassthroughs();
+    signals:
+      RuleAdded(s ipv,
+                s table,
+                s chain,
+                i priority,
+                as args);
+      PassthroughRemoved(s ipv,
+                         as args);
+      PassthroughAdded(s ipv,
+                       as args);
+      ChainRemoved(s ipv,
+                   s table,
+                   s chain);
+      RuleRemoved(s ipv,
+                  s table,
+                  s chain,
+                  i priority,
+                  as args);
+      ChainAdded(s ipv,
+                 s table,
+                 s chain);
+    properties:
+  };
+  interface org.fedoraproject.FirewallD1 {
+    methods:
+      queryPanicMode(out b arg_0);
+      setLogDenied(in  s value);
+      authorizeAll();
+      getLogDenied(out s arg_0);
+      getAutomaticHelpers(out s arg_0);
+      disablePanicMode();
+      completeReload();
+      getDefaultZone(out s arg_0);
+      getHelpers(out as arg_0);
+      getZoneSettings(in  s zone,
+                      out (sssbsasa(ss)asba(ssss)asasasasa(ss)b) arg_1);
+      listIcmpTypes(out as arg_0);
+      checkPermanentConfig();
+      enablePanicMode();
+      runtimeToPermanent();
+      listServices(out as arg_0);
+      getServiceSettings(in  s service,
+                         out (sssa(ss)asa{ss}asa(ss)) arg_1);
+      getHelperSettings(in  s helper,
+                        out (sssssa(ss)) arg_1);
+      setAutomaticHelpers(in  s value);
+      getIcmpTypeSettings(in  s icmptype,
+                          out (sssas) arg_1);
+      reload();
+      setDefaultZone(in  s zone);
+    signals:
+      Reloaded();
+      LogDeniedChanged(s value);
+      AutomaticHelpersChanged(s value);
+      PanicModeDisabled();
+      DefaultZoneChanged(s zone);
+      PanicModeEnabled();
+    properties:
+      readonly b BRIDGE;
+      readonly b nf_conntrack_helper_setting;
+      readonly as IPSetTypes;
+      readonly b IPSet;
+      readonly s interface_version;
+      readonly b IPv6_rpfilter;
+      readonly as IPv6ICMPTypes;
+      readonly a{sas} nf_nat_helpers;
+      readonly s state;
+      readonly s version;
+      readonly a{sas} nf_conntrack_helpers;
+      readonly b IPv4;
+      readonly b IPv6;
+      readonly as IPv4ICMPTypes;
+  };
+  interface org.freedesktop.DBus.Introspectable {
+    methods:
+      Introspect(out s arg_0);
+    signals:
+    properties:
+  };
+  interface org.fedoraproject.FirewallD1.ipset {
+    methods:
+      queryEntry(in  s ipset,
+                 in  s entry,
+                 out b arg_2);
+      getEntries(in  s ipset,
+                 out as arg_1);
+      getIPSetSettings(in  s ipset,
+                       out (ssssa{ss}as) arg_1);
+      getIPSets(out as arg_0);
+      addEntry(in  s ipset,
+               in  s entry);
+      setEntries(in  s ipset,
+                 in  as entries);
+      queryIPSet(in  s ipset,
+                 out b arg_1);
+      removeEntry(in  s ipset,
+                  in  s entry);
+    signals:
+      EntryAdded(s ipset,
+                 s entry);
+      EntryRemoved(s ipset,
+                   s entry);
+    properties:
+  };
+  interface org.fedoraproject.FirewallD1.policies {
+    methods:
+      addLockdownWhitelistContext(in  s context);
+      getLockdownWhitelistCommands(out as arg_0);
+      removeLockdownWhitelistCommand(in  s command);
+      addLockdownWhitelistUser(in  s user);
+      queryLockdownWhitelistContext(in  s context,
+                                    out b arg_1);
+      getLockdownWhitelistUsers(out as arg_0);
+      getLockdownWhitelistContexts(out as arg_0);
+      queryLockdown(out b arg_0);
+      enableLockdown();
+      queryLockdownWhitelistUser(in  s user,
+                                 out b arg_1);
+      removeLockdownWhitelistUid(in  i uid);
+      removeLockdownWhitelistContext(in  s context);
+      disableLockdown();
+      addLockdownWhitelistUid(in  i uid);
+      removeLockdownWhitelistUser(in  s user);
+      getLockdownWhitelistUids(out ai arg_0);
+      addLockdownWhitelistCommand(in  s command);
+      queryLockdownWhitelistCommand(in  s command,
+                                    out b arg_1);
+      queryLockdownWhitelistUid(in  i uid,
+                                out b arg_1);
+    signals:
+      LockdownDisabled();
+      LockdownEnabled();
+      LockdownWhitelistContextAdded(s context);
+      LockdownWhitelistUidAdded(i uid);
+      LockdownWhitelistCommandRemoved(s command);
+      LockdownWhitelistCommandAdded(s command);
+      LockdownWhitelistContextRemoved(s context);
+      LockdownWhitelistUserAdded(s user);
+      LockdownWhitelistUserRemoved(s user);
+      LockdownWhitelistUidRemoved(i uid);
+    properties:
+  };
+  interface org.freedesktop.DBus.Properties {
+    methods:
+      Set(in  s interface_name,
+          in  s property_name,
+          in  v new_value);
+      GetAll(in  s interface_name,
+             out a{sv} arg_1);
+      Get(in  s interface_name,
+          in  s property_name,
+          out v arg_2);
+    signals:
+      PropertiesChanged(s interface_name,
+                        a{sv} changed_properties,
+                        as invalidated_properties);
+    properties:
+  };
+  interface org.fedoraproject.FirewallD1.zone {
+    methods:
+      changeZone(in  s zone,
+                 in  s interface,
+                 out s arg_2);
+      getInterfaces(in  s zone,
+                    out as arg_1);
+      removeService(in  s zone,
+                    in  s service,
+                    out s arg_2);
+      removeInterface(in  s zone,
+                      in  s interface,
+                      out s arg_2);
+      getSourcePorts(in  s zone,
+                     out aas arg_1);
+      queryPort(in  s zone,
+                in  s port,
+                in  s protocol,
+                out b arg_3);
+      addMasquerade(in  s zone,
+                    in  i timeout,
+                    out s arg_2);
+      getRichRules(in  s zone,
+                   out as arg_1);
+      getPorts(in  s zone,
+               out aas arg_1);
+      removeIcmpBlockInversion(in  s zone,
+                               out s arg_1);
+      getIcmpBlocks(in  s zone,
+                    out as arg_1);
+      queryInterface(in  s zone,
+                     in  s interface,
+                     out b arg_2);
+      getServices(in  s zone,
+                  out as arg_1);
+      removePort(in  s zone,
+                 in  s port,
+                 in  s protocol,
+                 out s arg_3);
+      addIcmpBlockInversion(in  s zone,
+                            out s arg_1);
+      getZoneOfInterface(in  s interface,
+                         out s arg_1);
+      queryService(in  s zone,
+                   in  s service,
+                   out b arg_2);
+      addProtocol(in  s zone,
+                  in  s protocol,
+                  in  i timeout,
+                  out s arg_3);
+      removeIcmpBlock(in  s zone,
+                      in  s icmp,
+                      out s arg_2);
+      addIcmpBlock(in  s zone,
+                   in  s icmp,
+                   in  i timeout,
+                   out s arg_3);
+      addSource(in  s zone,
+                in  s source,
+                out s arg_2);
+      querySource(in  s zone,
+                  in  s source,
+                  out b arg_2);
+      addPort(in  s zone,
+              in  s port,
+              in  s protocol,
+              in  i timeout,
+              out s arg_4);
+      queryIcmpBlock(in  s zone,
+                     in  s icmp,
+                     out b arg_2);
+      queryIcmpBlockInversion(in  s zone,
+                              out b arg_1);
+      getProtocols(in  s zone,
+                   out as arg_1);
+      querySourcePort(in  s zone,
+                      in  s port,
+                      in  s protocol,
+                      out b arg_3);
+      removeSourcePort(in  s zone,
+                       in  s port,
+                       in  s protocol,
+                       out s arg_3);
+      queryProtocol(in  s zone,
+                    in  s protocol,
+                    out b arg_2);
+      changeZoneOfInterface(in  s zone,
+                            in  s interface,
+                            out s arg_2);
+      removeSource(in  s zone,
+                   in  s source,
+                   out s arg_2);
+      removeRichRule(in  s zone,
+                     in  s rule,
+                     out s arg_2);
+      changeZoneOfSource(in  s zone,
+                         in  s source,
+                         out s arg_2);
+      getForwardPorts(in  s zone,
+                      out aas arg_1);
+      addService(in  s zone,
+                 in  s service,
+                 in  i timeout,
+                 out s arg_3);
+      removeProtocol(in  s zone,
+                     in  s protocol,
+                     out s arg_2);
+      addSourcePort(in  s zone,
+                    in  s port,
+                    in  s protocol,
+                    in  i timeout,
+                    out s arg_4);
+      queryForwardPort(in  s zone,
+                       in  s port,
+                       in  s protocol,
+                       in  s toport,
+                       in  s toaddr,
+                       out b arg_5);
+      getSources(in  s zone,
+                 out as arg_1);
+      getZones(out as arg_0);
+      addRichRule(in  s zone,
+                  in  s rule,
+                  in  i timeout,
+                  out s arg_3);
+      queryMasquerade(in  s zone,
+                      out b arg_1);
+      removeMasquerade(in  s zone,
+                       out s arg_1);
+      isImmutable(in  s zone,
+                  out b arg_1);
+      removeForwardPort(in  s zone,
+                        in  s port,
+                        in  s protocol,
+                        in  s toport,
+                        in  s toaddr,
+                        out s arg_5);
+      getZoneOfSource(in  s source,
+                      out s arg_1);
+      queryRichRule(in  s zone,
+                    in  s rule,
+                    out b arg_2);
+      addInterface(in  s zone,
+                   in  s interface,
+                   out s arg_2);
+      addForwardPort(in  s zone,
+                     in  s port,
+                     in  s protocol,
+                     in  s toport,
+                     in  s toaddr,
+                     in  i timeout,
+                     out s arg_6);
+      getActiveZones(out a{sa{sas}} arg_0);
+    signals:
+      IcmpBlockRemoved(s zone,
+                       s icmp);
+      RichRuleAdded(s zone,
+                    s rule,
+                    i timeout);
+      IcmpBlockInversionAdded(s zone);
+      RichRuleRemoved(s zone,
+                      s rule);
+      SourceRemoved(s zone,
+                    s source);
+      ZoneChanged(s zone,
+                  s interface);
+      InterfaceRemoved(s zone,
+                       s interface);
+      SourceAdded(s zone,
+                  s source);
+      ServiceAdded(s zone,
+                   s service,
+                   i timeout);
+      ProtocolAdded(s zone,
+                    s protocol,
+                    i timeout);
+      PortAdded(s zone,
+                s port,
+                s protocol,
+                i timeout);
+      ZoneOfInterfaceChanged(s zone,
+                             s interface);
+      ZoneOfSourceChanged(s zone,
+                          s source);
+      InterfaceAdded(s zone,
+                     s interface);
+      ServiceRemoved(s zone,
+                     s service);
+      SourcePortRemoved(s zone,
+                        s port,
+                        s protocol);
+      SourcePortAdded(s zone,
+                      s port,
+                      s protocol,
+                      i timeout);
+      MasqueradeAdded(s zone,
+                      i timeout);
+      IcmpBlockInversionRemoved(s zone);
+      IcmpBlockAdded(s zone,
+                     s icmp,
+                     i timeout);
+      ForwardPortRemoved(s zone,
+                         s port,
+                         s protocol,
+                         s toport,
+                         s toaddr);
+      PortRemoved(s zone,
+                  s port,
+                  s protocol);
+      ForwardPortAdded(s zone,
+                       s port,
+                       s protocol,
+                       s toport,
+                       s toaddr,
+                       i timeout);
+      ProtocolRemoved(s zone,
+                      s protocol);
+      MasqueradeRemoved(s zone);
+    properties:
+  };
+  node config {
+  };
+};
