@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 public class PortRuleServiceImpl implements PortRuleService {
     private static final String FIREWALLD_PATH = "/org/fedoraproject/FirewallD1";
@@ -30,6 +31,7 @@ public class PortRuleServiceImpl implements PortRuleService {
 
     /**
      * 获取某个zone内所有的端口规则
+     *
      * @param zoneName zone名字
      * @return
      */
@@ -66,16 +68,19 @@ public class PortRuleServiceImpl implements PortRuleService {
         boolean addOrRemovePortRuleResult = false;
 
         // 参数校验
-        if (!("insert".equals(operation) || "delete".equals(operation)) &&  portRule == null || WallUtil.isIllegal(portRule.getPort(), portRule.getProtocol())) {
+        if (!("insert".equals(operation) || "delete".equals(operation)) && portRule == null || WallUtil.isIllegal(portRule.getPort(), portRule.getProtocol())) {
             throw new FirewallException("Invalid port rule parameters");
         }
 
         // 判断是添加还是移除操作
 //        String operation ;
         // 构建 firewall-cmd 命令
-        String command ;
+        String command;
         // firewall-cmd 命令 list
         ArrayList<String> commandList = new ArrayList<>();
+
+        // rich rule operation either add or remove
+        operation = "insert".equals(operation) ? "add" : "remove";
 
         // judge which simple operate or richRule operate ? if own sourceIps, it's richRule operate
         if (portRule.getSourceRule() != null) {
@@ -89,8 +94,6 @@ public class PortRuleServiceImpl implements PortRuleService {
                 String ipType = IpUtils.getIpType(portRule.getPort());
                 // rich rule policy either accept or reject
                 policy = portRule.getPolicy() != null && portRule.getPolicy() ? "accept" : "reject";
-                // rich rule operation either add or remove
-                operation = "insert".equals(operation) ? "add" : "remove";
 
                 // 构建富规则命令
                 String richRule = String.format("rule family=\"%s\" source address=\"%s\" port port=\"%s\" protocol=\"%s\" %s",
@@ -108,8 +111,11 @@ public class PortRuleServiceImpl implements PortRuleService {
                 commandList.add(command);
             }
 
-        }else{
-            operation = "insert".equals(operation)? "add" : "remove";
+        } else {
+            // PortRule的端口可能的形式
+            // 单个端口，如：8080  firewall-cmd --zone=public --add-port=8080/tcp  --permanent
+            //范围端口，如：3000-4000 firewall-cmd --add-port=3000-4000/tcp --permanent
+
             command = String.format("firewall-cmd --zone=%s --%s-port=%s/%s --permanent",
                     zoneName,
                     operation,
@@ -122,22 +128,21 @@ public class PortRuleServiceImpl implements PortRuleService {
         try {
             boolean allSucess = true;
             ProcessResult result = null;
-            for (String command1 : commandList) {
-                logger.info("will execute firewall command : {}",command1);
-                // 执行命令
-                result = new ProcessExecutor()
-                        .command("/bin/sh", "-c", command1)
-                        .readOutput(true)
-                        .timeout(30, TimeUnit.SECONDS)
-                        .execute();
-                if(result.getExitValue() != 0){
-                    allSucess = false;
-                }
+            String combinedCommand = String.join(" ; ", commandList);
+
+            logger.info("will execute firewall command : {}", combinedCommand);
+            // 执行命令
+            result = new ProcessExecutor()
+                    .command("/bin/bash", "-c", combinedCommand)
+                    .readOutput(true)
+                    .timeout(30, TimeUnit.SECONDS)
+                    .execute();
+            if (result.getExitValue() != 0) {
+                allSucess = false;
             }
 
 
             // 检查执行结果(return and reload firewalld if all pass)
-            // todo problem only add first rule when the situation of sourceIpsSet
             if (allSucess) {
                 // 规则添加成功后重新加载防火墙配置
                 WallUtil.reloadFirewall(FireWallType.FIREWALLD);
@@ -150,12 +155,25 @@ public class PortRuleServiceImpl implements PortRuleService {
                         portRule.getProtocol(),
                         errorOutput));
             }
-            return  addOrRemovePortRuleResult;
+            return addOrRemovePortRuleResult;
         } catch (IOException | InterruptedException | TimeoutException e) {
             throw new FirewallException("Failed to execute firewall command: " + e.getMessage(), e);
         } catch (FirewallException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public Boolean addOrRemovePortRuleByMultiPort(String zoneName, List<PortRule> portRules, String operation) throws FirewallException {
+        boolean allDone = true;
+        // 如果有一条没有执行成功，中止后续行为
+        for (PortRule portRule : portRules) {
+            if (!addOrRemovePortRule(zoneName, portRule, operation)) {
+                allDone = false;
+                break;
+            }
+        }
+        return allDone;
     }
 
     private ArrayList<PortRule> getPortRule(ZoneInterface zoneInterface, String zoneName) {
@@ -214,14 +232,15 @@ public class PortRuleServiceImpl implements PortRuleService {
             portRulesFromRichRules.add(portRule);
         }
 
-        HashSet<PortRule> distinctPortRules = new HashSet<>(){};
+        HashSet<PortRule> distinctPortRules = new HashSet<>() {
+        };
         // 先添加 从富规则中提取的，如果后面有”重复“的，就不会添加成功，以从富规则中提取的为准
         distinctPortRules.addAll(portRulesFromRichRules);
         // 后添加从 dbus查询的
         distinctPortRules.addAll(portRulesFromDbusPortQuery);
-        logger.info("当前zone: {},从富规则中提取的端口规则有portRulesFromRichRules {} 条 :", zoneName,portRulesFromRichRules.size());
-        logger.info("当前zone: {},从dbus端口查询中提取的端口规则有portRulesFromDbusPortQuery {} 条 :", zoneName,portRulesFromDbusPortQuery.size());
-        logger.info("当前zone: {},按照（端口号，端口协议）去重，优先富规则形式，合并端口规则后有 {} 条 :", zoneName,distinctPortRules.size());
+        logger.info("当前zone: {},从富规则中提取的端口规则有portRulesFromRichRules {} 条 :", zoneName, portRulesFromRichRules.size());
+        logger.info("当前zone: {},从dbus端口查询中提取的端口规则有portRulesFromDbusPortQuery {} 条 :", zoneName, portRulesFromDbusPortQuery.size());
+        logger.info("当前zone: {},按照（端口号，端口协议）去重，优先富规则形式，合并端口规则后有 {} 条 :", zoneName, distinctPortRules.size());
 
         // 补充 端口规则中端口的使用状态 and  iptype
         for (PortRule rule : distinctPortRules) {
@@ -232,60 +251,6 @@ public class PortRuleServiceImpl implements PortRuleService {
             rule.setFamily(ipType);
         }
 
-        /*     // 处理获取的端口信息
-        for (int i = 0; i < portArray.length; i++) {
-            // 格式如 "[22, tcp]"
-            String protocol = portArray[i][1];
-            String portNumber = portArray[i][0];
-
-            // 检查端口状态
-            boolean enabled = zoneInterface.queryPort(zoneName, portNumber, protocol);
-
-            logger.info("端口: {}", portNumber);
-            logger.info("协议: {}", protocol);
-            logger.info("状态: {}", enabled ? "已使用" : "未使用");
-
-
-            // 从富规则中查找与此端口相关的规则
-            for (FirewallRuleParser.ParsedRule parsedRule : portWithSourceAndPolicySet) {
-                // 默认端口规则为accept,除非富规则中改动
-                boolean policy = true;
-
-                // 端口默认描述为 All IPs allowed, 除非富规则中改动
-                String description = "All IPs allowed";
-
-                // 端口默认sourceIP为 All IPs allowed,即不限制
-                String sourceIPs = "All IPs allowed";
-                if (portNumber.equals(parsedRule.getPort()) && protocol.equals(parsedRule.getProtocol())){
-
-                    sourceIPs = parsedRule.getSource();
-                    SourceRule sourceRule = SourceRule.builder()
-                            .source(sourceIPs)
-                            .build();
-
-                    String fromRichRulePolicy = parsedRule.getPolicy();
-                    if ("reject".equals(fromRichRulePolicy) || "drop".equals(fromRichRulePolicy)) {
-                        policy = false;
-                    }
-
-                    // 端口默认描述为 All IPs allowed
-                    description = parsedRule.getDescription();
-
-                    PortRule portRule = PortRule.builder()
-                            .port(portNumber)
-                            .protocol(protocol)
-                            .using(enabled)
-                            .policy(policy)
-                            .sourceRule(sourceRule)
-                            .descriptor(description)
-                            .build();
-                    portRules.add(portRule);
-                }
-                logger.info("策略: {}", policy);
-                logger.info("源IP: {}", sourceIPs);
-                logger.info("描述: {}", description);
-            }
-        }*/
 
         return new ArrayList<>(distinctPortRules);
     }
@@ -306,12 +271,4 @@ public class PortRuleServiceImpl implements PortRuleService {
         String[][] getSourcePorts(String zone);
     }
 
-    public static void main(String[] args) {
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
-        List<PortRule> rules = service.queryAllPortRule("public");
-        for (PortRule rule : rules) {
-            logger.info(rule.toString());
-        }
-
-    }
 }

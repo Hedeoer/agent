@@ -32,7 +32,7 @@ public class WallUtil {
     public static void reloadFirewall(FireWallType fireWallType) throws FirewallException {
         try {
             new ProcessExecutor()
-                    .command("/bin/sh", "-c", "firewall-cmd --reload")
+                    .command("/bin/bash", "-c", "firewall-cmd --reload")
                     .timeout(30, TimeUnit.SECONDS)
                     .execute();
         } catch (IOException | InterruptedException | TimeoutException e) {

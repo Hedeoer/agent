@@ -17,11 +17,21 @@ public interface PortRuleService {
     List<PortRule> queryAllPortRule(String zoneName);
 
     /**
-     * 添加一条端口规则
+     * 添加或者移除一条端口规则
      * @param portRule 端口规则
      * @param zoneName zone名字
      * @param  operation portRule operation (insert or delete)
-     * @return 添加结果
+     * @return 添加或者移除结果
      */
     Boolean addOrRemovePortRule(String zoneName, PortRule portRule, String operation) throws FirewallException;
+
+    /**
+     * 多个端口，如：8080,8081 意味着多次执行单个端口规则的操作 firewall-cmd --zone=public --add-port=8080/tcp --add-port=8081/tcp  --permanent
+     * 添加或者移除多条端口规则
+     * @param zoneName
+     * @param portRules
+     * @param operation
+     * @return  添加或者移除
+     */
+    Boolean addOrRemovePortRuleByMultiPort(String zoneName, List<PortRule> portRules, String operation) throws FirewallException;
 }
