@@ -21,17 +21,44 @@ public interface PortRuleService {
      * @param portRule 端口规则
      * @param zoneName zone名字
      * @param  operation portRule operation (insert or delete)
-     * @return 添加或者移除结果
+     * @return 添加或者移除结果 需要由调用方根据返回值判断是否要加载firewalld使其 addOrRemoveOnePortRule 生效
      */
-    Boolean addOrRemovePortRule(String zoneName, PortRule portRule, String operation) throws FirewallException;
+    Boolean addOrRemoveOnePortRule(String zoneName, PortRule portRule, String operation) throws FirewallException;
+
 
     /**
-     * 多个端口，如：8080,8081 意味着多次执行单个端口规则的操作 firewall-cmd --zone=public --add-port=8080/tcp --add-port=8081/tcp  --permanent
-     * 添加或者移除多条端口规则
+     * 批量添加或者移除端口规则
      * @param zoneName
      * @param portRules
      * @param operation
-     * @return  添加或者移除
+     * @return 都成功 返回true，否则 false ;需要由调用方根据返回值判断是否要加载firewalld使其 addOrRemoveBatchPortRules 生效
      */
-    Boolean addOrRemovePortRuleByMultiPort(String zoneName, List<PortRule> portRules, String operation) throws FirewallException;
+    Boolean addOrRemoveBatchPortRules(String zoneName, List<PortRule> portRules, String operation) throws FirewallException;
+
+
+    /**
+     * 通过 端口使用状态查询端口规则
+     * @param zoneName
+     * @param isUsing false 表示端口未使用
+     * @return 端口规则列表
+     */
+    List<PortRule> queryPortRulesByUsingStatus(String zoneName, Boolean isUsing);
+
+    /**
+     * 通过 规则策略 查询端口规则
+     * @param zoneName
+     * @param policy false 表示端口该端口规则为拒绝
+     * @return 端口规则列表
+     */
+    List<PortRule> queryPortRulesByPolicy(String zoneName, Boolean policy);
+
+    /**
+     * 更新一个端口规则
+     * @param zoneName
+     * @param oldPortRule
+     * @param newPortRule
+     * @return 更新成功则 true; 需要由调用方根据返回值判断是否要加载firewalld使其 updateOnePortRule 生效
+     */
+    Boolean updateOnePortRule(String zoneName, PortRule oldPortRule,PortRule newPortRule) throws FirewallException;
+
 }

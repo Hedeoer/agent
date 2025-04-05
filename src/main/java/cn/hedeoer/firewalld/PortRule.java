@@ -44,7 +44,8 @@ public class PortRule extends AbstractFirewallRule {
     @Override
     public String toString() {
         return "PortRule{" +
-                "port='" + port + '\'' +
+                "family='" + family + '\'' +
+                ", port='" + port + '\'' +
                 ", protocol='" + protocol + '\'' +
                 ", using=" + using +
                 ", policy=" + policy +
