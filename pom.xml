@@ -16,6 +16,15 @@
 
     <dependencies>
 
+        <!-- https://mvnrepository.com/artifact/redis.clients/jedis -->
+        <!--jedis客户端 3版本最新，可支持redis stream-->
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>5.2.0</version>
+        </dependency>
+
+
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
