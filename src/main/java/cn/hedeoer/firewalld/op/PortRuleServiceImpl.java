@@ -1,6 +1,7 @@
 package cn.hedeoer.firewalld.op;
 
 import cn.hedeoer.firewalld.PortRule;
+import cn.hedeoer.firewalld.RuleType;
 import cn.hedeoer.firewalld.SourceRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.pojo.FireWallType;
@@ -70,32 +71,37 @@ public class PortRuleServiceImpl implements PortRuleService {
      * @throws FirewallException
      */
     @Override
-    public Boolean addOrRemoveOnePortRule(String zoneName, PortRule portRule, String operation) throws FirewallException {
+    public Boolean addOrRemoveOnePortRule(String zoneName, PortRule portRule, String operation)  {
         boolean res = false;
-        if(portRule.getProtocol() == null || portRule.getPort() == null) return res;
+        try {
+            res = false;
+            if(portRule.getProtocol() == null || portRule.getPort() == null) return res;
 
-        String[] protocolSplit = portRule.getProtocol().split("/");
-        String[] portSplit = portRule.getPort().split(",");
-        boolean isMultiProtocol = protocolSplit.length > 1;
-        boolean isMultiPort = portSplit.length > 1;
-        // 判断是否 portRule 的 port为 ,分隔多个端口
-        if (isMultiPort) {
-            // 多端口 单协议
-            if(!isMultiProtocol) {
-                res = addOrRemovePortRuleByMultiPort(zoneName, portRule, operation);
-            }else {
-                // 多端口 多协议
-                res = addOrRemovePortRuleByMultiPortAndMultiProtocol(zoneName, portRule, operation);
-            }
+            String[] protocolSplit = portRule.getProtocol().split("/");
+            String[] portSplit = portRule.getPort().split(",");
+            boolean isMultiProtocol = protocolSplit.length > 1;
+            boolean isMultiPort = portSplit.length > 1;
+            // 判断是否 portRule 的 port为 ,分隔多个端口
+            if (isMultiPort) {
+                // 多端口 单协议
+                if(!isMultiProtocol) {
+                    res = addOrRemovePortRuleByMultiPort(zoneName, portRule, operation);
+                }else {
+                    // 多端口 多协议
+                    res = addOrRemovePortRuleByMultiPortAndMultiProtocol(zoneName, portRule, operation);
+                }
 
-        } else {
-            // 单个端口 单协议
-            if (!isMultiProtocol) {
-                res = addOrRemovePortRule(zoneName, portRule, operation);
-            }else {
-                // 单个端口 多协议
-                res = addOrRemovePortRuleByMultiProtocol(zoneName, portRule, operation);
+            } else {
+                // 单个端口 单协议
+                if (!isMultiProtocol) {
+                    res = addOrRemovePortRule(zoneName, portRule, operation);
+                }else {
+                    // 单个端口 多协议
+                    res = addOrRemovePortRuleByMultiProtocol(zoneName, portRule, operation);
+                }
             }
+        } catch (FirewallException e) {
+            throw new RuntimeException(e);
         }
         return res;
     }
@@ -106,10 +112,9 @@ public class PortRuleServiceImpl implements PortRuleService {
      * @param portRules
      * @param operation
      * @return false 或者 true，需要由调用方根据返回值判断是否要加载firewalld使其 addOrRemoveBatchPortRules 生效
-     * @throws FirewallException
      */
     @Override
-    public Boolean addOrRemoveBatchPortRules(String zoneName, List<PortRule> portRules, String operation) throws FirewallException {
+    public Boolean addOrRemoveBatchPortRules(String zoneName, List<PortRule> portRules, String operation)  {
         boolean flag = true;
         // 多次调用
         for (PortRule portRule : portRules) {
@@ -139,10 +144,16 @@ public class PortRuleServiceImpl implements PortRuleService {
     }
 
     @Override
-    public Boolean updateOnePortRule(String zoneName, PortRule oldPortRule, PortRule newPortRule) throws FirewallException {
+    public Boolean updateOnePortRule(String zoneName, PortRule oldPortRule, PortRule newPortRule)  {
         // 更新firewalld的一条端口规则：1. 删除原来的 2. 添加新的
-        Boolean deleteRes = addOrRemovePortRule(zoneName, oldPortRule, "delete");
-        Boolean insertRes = addOrRemovePortRule(zoneName, newPortRule, "insert");
+        Boolean deleteRes = null;
+        Boolean insertRes = null;
+        try {
+            deleteRes = addOrRemovePortRule(zoneName, oldPortRule, "delete");
+            insertRes = addOrRemovePortRule(zoneName, newPortRule, "insert");
+        } catch (FirewallException e) {
+            throw new RuntimeException(e);
+        }
         return deleteRes && insertRes;
     }
 
@@ -412,7 +423,7 @@ public class PortRuleServiceImpl implements PortRuleService {
         logger.info("当前zone: {},从dbus端口查询中提取的端口规则有portRulesFromDbusPortQuery {} 条 :", zoneName, portRulesFromDbusPortQuery.size());
 
 
-        // 补充 端口规则中端口的使用状态 and  iptype
+        // 补充 端口规则中端口的使用状态 和  iptype， zone，type，permanent（默认为永久生效）
         for (PortRule rule : distinctPortRules) {
             String processCommandName = PortUsageUtil.getProcessCommandName(Integer.parseInt(rule.getPort()));
             // 检查端口是否被进程使用中
@@ -421,6 +432,10 @@ public class PortRuleServiceImpl implements PortRuleService {
             rule.setUsing(enabled);
             String ipType = IpUtils.getIpType(rule.getPort());
             rule.setFamily(ipType);
+            rule.setZone(zoneName);
+            rule.setType(RuleType.PORT);
+            // todo 后续需要补充判断规则是否是永久生效的逻辑，目前默认永久生效
+            rule.setPermanent(true);
         }
 
         // PortRule{port='9999', protocol='tcp', using=false, policy=true, sourceRule=SourceRule(source=172.16.0.99), descriptor='All IPs allowed'}

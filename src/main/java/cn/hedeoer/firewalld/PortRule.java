@@ -1,5 +1,6 @@
 package cn.hedeoer.firewalld;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.util.HashMap;
@@ -14,6 +15,7 @@ import java.util.Objects;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PortRule extends AbstractFirewallRule {
     private String family;    // ip type (ipv4 ,ipv6)
     private String port;      // 端口号或范围 (如 "80" 或 "1024-2048")
@@ -44,13 +46,16 @@ public class PortRule extends AbstractFirewallRule {
     @Override
     public String toString() {
         return "PortRule{" +
-                "family='" + family + '\'' +
-                ", port='" + port + '\'' +
-                ", protocol='" + protocol + '\'' +
-                ", using=" + using +
-                ", policy=" + policy +
-                ", sourceRule=" + sourceRule +
+                "permanent=" + permanent +
+                ", type=" + type +
+                ", zone='" + zone + '\'' +
                 ", descriptor='" + descriptor + '\'' +
+                ", sourceRule=" + sourceRule +
+                ", policy=" + policy +
+                ", using=" + using +
+                ", protocol='" + protocol + '\'' +
+                ", port='" + port + '\'' +
+                ", family='" + family + '\'' +
                 '}';
     }
 

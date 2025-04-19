@@ -1,5 +1,6 @@
 package cn.hedeoer.firewalld;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,6 +16,7 @@ import java.util.Map;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SourceRule extends AbstractFirewallRule {
     private String source;  // 源IP地址或CIDR
 
