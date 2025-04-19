@@ -26,6 +26,20 @@ public class SimpleStreamConsumer {
         this.lastSeenId = StreamEntryID.XGROUP_LAST_ENTRY; // 从最新的开始
     }
 
+    /**
+     * 阻塞式读取 Redis Stream 中的新消息。
+     * <p>
+     * 该方法使用 XREAD 命令从指定的 Stream（由成员变量 {@code streamKey} 指定），
+     * 从上次读取到的 {@code lastSeenId} 之后开始，最多读取 {@code count} 条消息。
+     * 在没有新消息到达时，方法会阻塞最多 {@code blockTimeMillis} 毫秒，等待新消息到来，
+     * 超时后返回空列表。
+     * <p>
+     * 如果读取到新消息，将自动更新 {@code lastSeenId}，以便下次调用继续从上一次的位置拉取。
+     *
+     * @param count           最多读取的消息条数
+     * @param blockTimeMillis 阻塞等待新消息的最长时间（毫秒），0 表示一直阻塞直到有消息
+     * @return                读取到的 StreamEntry 消息列表，若无新消息则返回空列表
+     */
     public List<StreamEntry> readNewMessages(int count, int blockTimeMillis) {
 
         XReadParams params = XReadParams.xReadParams()
@@ -62,7 +76,7 @@ public class SimpleStreamConsumer {
     public static void main(String[] args) {
         Jedis jedis = RedisUtil.getJedis();
         SimpleStreamConsumer consumer = new SimpleStreamConsumer(
-                jedis, "orders");
+                jedis, "test1");
 
         System.out.println("Starting simple consumer...");
 

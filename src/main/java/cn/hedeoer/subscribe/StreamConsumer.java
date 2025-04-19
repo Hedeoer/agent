@@ -97,6 +97,21 @@ public class StreamConsumer {
     }
 
 
+    /**
+     * 以消费者组（Consumer Group）的方式阻塞消费 Redis Stream 中的新消息，并在消费后自动确认（ACK）。
+     * <p>
+     * 此方法使用 XREADGROUP 命令，从指定的 Stream（由 {@code streamKey} 指定），
+     * 针对当前消费者组 ({@code groupName}) 和消费者名称 ({@code consumerName})，
+     * 读取尚未被任何消费者处理的新消息（{@code StreamEntryID.XREADGROUP_UNDELIVERED_ENTRY}）。
+     * 拉取数不会超过 {@code count}，可阻塞等待新消息到来最长 {@code blockTimeMillis} 毫秒。
+     * <p>
+     * 方法内会对每条拉取到的消息进行处理（通过简单打印），然后自动调用 XACK 确认消息已处理。
+     * 若无新消息，则返回空列表。
+     *
+     * @param count           最多消费的消息条数
+     * @param blockTimeMillis 阻塞等待新消息的最大时间（毫秒），0 表示一直阻塞直到有消息
+     * @return                读取并确认的 StreamEntry 消息列表，若无新消息则返回空列表
+     */
     public List<StreamEntry> consumeNewMessages(int count, int blockTimeMillis) {
 
         XReadGroupParams params = XReadGroupParams.xReadGroupParams()
@@ -115,12 +130,12 @@ public class StreamConsumer {
             // 获取第一个流的所有条目（因为我们只查询了一个流）
             List<StreamEntry> entries = response.get(0).getValue();
 
-            for (StreamEntry entry : entries) {
+/*            for (StreamEntry entry : entries) {
                 // 处理消息
-                System.out.println("Processing message: " + entry.getID() + " - " + entry.getFields());
+//                System.out.println("Processing message: " + entry.getID() + " - " + entry.getFields());
                 // 确认消息处理完成
                 jedis.xack(streamKey, groupName, entry.getID());
-            }
+            }*/
             return entries;
         }
 

@@ -20,7 +20,14 @@ public class StreamProducer {
     }
 
     /**
-     * 发布消息到Stream
+     * 向指定的 Redis Stream 发布一条消息，并设置流的最大长度约为 1000 条。
+     * <p>
+     * 消息以 Map 形式存储到 Redis Stream {@code streamKey} 中；
+     * 当消息数超过 1000 条时，Stream 会自动进行近似裁剪（approximate trimming），以限制其最大长度，
+     * 有利于节省内存并保持流的活跃状态。
+     *
+     * @param message 需发布到 Stream 的消息内容，键值对形式
+     * @return        新添加消息的 StreamEntryID
      */
     public StreamEntryID publishMessage(Map<String, String> message) {
 
