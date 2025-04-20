@@ -53,6 +53,15 @@ public interface PortRuleService {
     List<PortRule> queryPortRulesByPolicy(String zoneName, Boolean policy);
 
     /**
+     * 通过 规则策略 和 端口使用状态 查询端口规则
+     * @param zoneName
+     * @param isUsing
+     * @param policy
+     * @return
+     */
+    List<PortRule> queryPortRulesByPolicyAndUsingStatus(String zoneName, Boolean isUsing , Boolean policy);
+
+    /**
      * 更新一个端口规则
      * @param zoneName
      * @param oldPortRule

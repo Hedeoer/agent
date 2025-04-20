@@ -4,7 +4,6 @@ import cn.hedeoer.firewalld.PortRule;
 import cn.hedeoer.firewalld.RuleType;
 import cn.hedeoer.firewalld.SourceRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
-import cn.hedeoer.pojo.FireWallType;
 import cn.hedeoer.util.DeepCopyUtil;
 import cn.hedeoer.util.IpUtils;
 import cn.hedeoer.util.PortUsageUtil;
@@ -23,6 +22,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class PortRuleServiceImpl implements PortRuleService {
     private static final String FIREWALLD_PATH = "/org/fedoraproject/FirewallD1";
@@ -141,6 +141,56 @@ public class PortRuleServiceImpl implements PortRuleService {
         return rules.stream()
                 .filter(rule -> policy.equals(rule.getPolicy()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 根据策略(policy)和使用状态(isUsing)查询指定防火墙区域的端口规则
+     *
+     * <p>此方法允许根据两个条件（策略和使用状态）对端口规则进行过滤查询。
+     * 当任一参数为null时，表示不使用该条件进行过滤；当两个参数都为null时，
+     * 返回指定区域的所有端口规则。</p>
+     *
+     * @param zoneName 防火墙区域名称，不能为null或空
+     * @param isUsing 使用状态过滤条件，true表示查询正在使用的规则，false表示查询未使用的规则，null表示不过滤使用状态
+     * @param policy 策略过滤条件，true表示查询允许(accept)策略的规则，false表示查询拒绝(reject)策略的规则，null表示不过滤策略
+     * @return 符合条件的端口规则列表；如果没有符合条件的规则或查询出错，返回空列表
+     */
+    @Override
+    public List<PortRule> queryPortRulesByPolicyAndUsingStatus(String zoneName, Boolean isUsing, Boolean policy) {
+        // 参数验证
+        if (zoneName == null || zoneName.trim().isEmpty()) {
+            return Collections.emptyList(); // 或抛出异常
+        }
+
+        // 获取所有规则
+        List<PortRule> allRules = queryAllPortRule(zoneName);
+        if (allRules == null || allRules.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 如果两个条件都为null，直接返回所有规则
+        if (isUsing == null && policy == null) {
+            logger.info("按照过滤条件：isUsing:{} ,policy:{} 过滤，都为null，将返回所有的端口规则",isUsing,policy);
+            return allRules;
+        }
+
+        // 使用Stream API进行过滤
+        Stream<PortRule> ruleStream = allRules.stream();
+
+        // 根据policy过滤
+        if (policy != null) {
+            ruleStream = ruleStream.filter(rule -> policy.equals(rule.getPolicy()));
+        }
+
+        // 根据isUsing过滤
+        if (isUsing != null) {
+            ruleStream = ruleStream.filter(rule -> isUsing.equals(rule.getUsing()));
+        }
+        List<PortRule> collect = ruleStream.collect(Collectors.toList());
+        logger.info("按照过滤条件：isUsing:{} ,policy:{} 过滤，命中{}条",isUsing,policy,collect.size());
+
+        // 收集结果并返回
+        return collect;
     }
 
     @Override

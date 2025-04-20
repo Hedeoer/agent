@@ -37,6 +37,25 @@ public class StreamProducer {
 
     }
 
+    /**
+     * xadd 指定entryId同时使用近似裁剪保留最近1000条
+     * @param message 消息内容
+     * @param entryID 指定 entryId
+     * @return entryId
+     */
+    public StreamEntryID publishMessage(Map<String, String> message, StreamEntryID entryID) {
+
+        // 添加消息并设置Stream最大长度约为1000
+        // 设置流的最大长度(使用近似裁剪)
+        XAddParams xAddParams = new XAddParams()
+                .approximateTrimming()
+                .maxLen(1000)
+                .id(entryID);
+        // 执行XADD命令
+        return jedis.xadd(streamKey, xAddParams, message);
+
+    }
+
     public void close() {
         RedisUtil.close(jedis);
     }

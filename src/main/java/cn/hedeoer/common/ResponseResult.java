@@ -4,6 +4,9 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 @Data
 @Builder
@@ -80,5 +83,82 @@ public class ResponseResult<T> {
                 .timestamp(System.currentTimeMillis())
                 .build();
     }
+
+    /**
+     * 将ResponseResult对象转换为Map<String, String>
+     * @param responseResult 需要转换的ResponseResult对象
+     * @param <T> 数据类型
+     * @return 转换后的Map
+     */
+    public static <T> Map<String, String> convertResponseResultToMap(ResponseResult<T> responseResult) {
+        if (responseResult == null) {
+            return new HashMap<>();
+        }
+
+        Map<String, String> resultMap = new HashMap<>();
+
+        // 添加timestamp字段
+        resultMap.put("timestamp", String.valueOf(responseResult.getTimestamp()));
+
+        // 添加status字段
+        if (responseResult.getStatus() != null) {
+            resultMap.put("status", responseResult.getStatus());
+        }
+
+        // 添加message字段
+        if (responseResult.getMessage() != null) {
+            resultMap.put("message", responseResult.getMessage());
+        }
+
+        // 处理data字段
+        T data = responseResult.getData();
+        if (data != null) {
+            String dataStr;
+
+            // 如果data是集合类型
+            if (data instanceof Collection) {
+                Collection<?> collection = (Collection<?>) data;
+                StringBuilder sb = new StringBuilder("[");
+                boolean first = true;
+
+                for (Object item : collection) {
+                    if (!first) {
+                        sb.append(", ");
+                    }
+                    sb.append(item.toString());
+                    first = false;
+                }
+
+                sb.append("]");
+                dataStr = sb.toString();
+            }
+            // 如果data是Map类型
+            else if (data instanceof Map) {
+                Map<?, ?> map = (Map<?, ?>) data;
+                StringBuilder sb = new StringBuilder("{");
+                boolean first = true;
+
+                for (Map.Entry<?, ?> entry : map.entrySet()) {
+                    if (!first) {
+                        sb.append(", ");
+                    }
+                    sb.append(entry.getKey()).append("=").append(entry.getValue());
+                    first = false;
+                }
+
+                sb.append("}");
+                dataStr = sb.toString();
+            }
+            // 其他类型直接使用toString()
+            else {
+                dataStr = data.toString();
+            }
+
+            resultMap.put("data", dataStr);
+        }
+
+        return resultMap;
+    }
+
 
 }

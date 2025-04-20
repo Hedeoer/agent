@@ -172,4 +172,12 @@ public class PortRuleServiceImplTest {
         List<PortRule> rules = service.queryPortRulesByPolicy("public", Boolean.TRUE);
         rules.forEach(System.out::println);
     }
+
+    @Test
+    public void queryPortRulesByPolicyAndUsingStatus() {
+        PortRuleServiceImpl service = new PortRuleServiceImpl();
+
+        List<PortRule> rules = service.queryPortRulesByPolicyAndUsingStatus("public", null,null );
+        rules.forEach(System.out::println);
+    }
 }
