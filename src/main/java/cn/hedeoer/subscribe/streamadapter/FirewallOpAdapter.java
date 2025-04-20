@@ -6,6 +6,7 @@ import cn.hedeoer.firewalld.PortRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.firewalld.op.PortRuleServiceImpl;
 import cn.hedeoer.pojo.FireWallType;
+import cn.hedeoer.subscribe.SimpleStreamConsumer;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;
 import cn.hedeoer.util.RedisUtil;
@@ -33,114 +34,126 @@ import java.util.Map;
  * 对redis stream的 数据做适配响应，比如 当添加或者删除一个防火墙规则时，需要调用方法
  * cn.hedeoer.firewalld.op.PortRuleService#addOrRemoveOnePortRule(java.lang.String, cn.hedeoer.firewalld.PortRule, java.lang.String)
  */
-public class FirewallOpAdapter {
+public class FirewallOpAdapter implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(FirewallOpAdapter.class);
 
+    @Override
+    public void run() {
 
-    // 获取 redis stream的某个 stream key下的数据，此处的stream key为 agent机器节点的唯一标识
-    // 解析 stream 中的数据
-    // 判断调用具体的方法
-
-    public static void main(String[] args) {
-        Jedis jedis = RedisUtil.getJedis();
+        // todo 需要获取agent节点的唯一标识
         String agentId = "001";
         String subStreamKey = agentId + ":sub";
         String groupName = "firewall_" + subStreamKey + "_group";
-        String consumerName = "firewall_" + subStreamKey+  "_consumer";
-        StreamConsumer consumer = new StreamConsumer(
-                jedis, subStreamKey, groupName, consumerName);
+        String consumerName = "firewall_" + subStreamKey + "_consumer";
+
+//            SimpleStreamConsumer simpleStreamConsumer = new SimpleStreamConsumer(jedis, subStreamKey);
 
         // 消费流的结果封装
         ResponseResult<List<PortRule>> consumeResult = ResponseResult.success();
 
         // 不断循环 + block实现不断拉取 指定 stream key的数据，但没有数据时，一直阻塞；当有数据，消费处理，后进入下一次循环
+
         while (true) {
+            // 每次循环都重新获取 Jedis，用完就关闭,这样即使某次消费中 Jedis 发生了超时、阻塞断开、协议污染，下一轮会用全新连接，最大化避免脏连接带来的所有潜在问题
+            try (Jedis jedis = RedisUtil.getJedis()) {
+                StreamConsumer consumer = new StreamConsumer(jedis, subStreamKey, groupName, consumerName);
+                List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 0);
+//                List<StreamEntry> streamEntries1 = simpleStreamConsumer.readNewMessages(1, 0);
+                if (streamEntries.isEmpty()) {
+                    continue;
+                }
+                StreamEntry streamEntry = streamEntries.get(0);
 
-            List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 0);
-            StreamEntry streamEntry = streamEntries.get(0);
+                // 转化 streamEntry的fields为java对象
+                PortRuleStreamEntry portRuleStreamEntry = fromMap(streamEntry.getFields());
+                // 判断此次端口规则操作的类型（PortRuleOpType枚举）
+                PortRuleOpType portRuleOpType = judgePortRuleOpType(portRuleStreamEntry);
 
-            // 转化 streamEntry的fields为java对象
-            PortRuleStreamEntry portRuleStreamEntry = fromMap(streamEntry.getFields());
-            // 判断此次端口规则操作的类型（PortRuleOpType枚举）
-            PortRuleOpType portRuleOpType = judgePortRuleOpType(portRuleStreamEntry);
+                PortRuleServiceImpl portRuleService = new PortRuleServiceImpl();
+                //
+                Map<String, String> requestParams = portRuleStreamEntry.getRequestParams();
+                // 防火墙zone
+                String zoneName = requestParams.get("zoneName");
+                String dataOpType = portRuleStreamEntry.getDataOpType();
+                List<PortRule> datas = portRuleStreamEntry.getData();
 
-            PortRuleServiceImpl portRuleService = new PortRuleServiceImpl();
-            //
-            Map<String, String> requestParams = portRuleStreamEntry.getRequestParams();
-            // 防火墙zone
-            String zoneName = requestParams.get("zoneName");
-            String dataOpType = portRuleStreamEntry.getDataOpType();
-            List<PortRule> datas = portRuleStreamEntry.getData();
+                logger.info("将进行 {} 操作", portRuleOpType.name());
 
-            logger.info("将进行 {} 操作", portRuleOpType.name());
-
-            List<PortRule> rules = null;
-            Boolean consumeResultBoolean = null;
-            switch (portRuleOpType) {
-                case QUERY_ALL_PORTRULE:
-                    rules = portRuleService.queryAllPortRule(zoneName);
-                    if (rules == null) {
-                        consumeResult = ResponseResult.fail(rules, "无法获取全部端口规则！！");
+                List<PortRule> rules = null;
+                Boolean consumeResultBoolean = null;
+                switch (portRuleOpType) {
+                    case QUERY_ALL_PORTRULE:
+                        rules = portRuleService.queryAllPortRule(zoneName);
+                        if (rules == null) {
+                            consumeResult = ResponseResult.fail(rules, "无法获取全部端口规则！！");
+                            break;
+                        }
                         break;
-                    }
-                    break;
-                case QUERY_PORTRULES_BY_POLICY_AND_USINGSTATUS:
-                    boolean policy = Boolean.parseBoolean(requestParams.get("policy"));
-                    boolean isUsing = Boolean.parseBoolean(requestParams.get("isUsing"));
-                    rules = portRuleService.queryPortRulesByPolicyAndUsingStatus(zoneName, isUsing,policy);
-                    if (rules == null){
-                        consumeResult = ResponseResult.fail(rules, "无法通过policy: "+policy+" 和 isUsing: "+isUsing+" 获取端口规则！！");
+                    case QUERY_PORTRULES_BY_POLICY_AND_USINGSTATUS:
+                        boolean policy = Boolean.parseBoolean(requestParams.get("policy"));
+                        boolean isUsing = Boolean.parseBoolean(requestParams.get("isUsing"));
+                        rules = portRuleService.queryPortRulesByPolicyAndUsingStatus(zoneName, isUsing, policy);
+                        if (rules == null) {
+                            consumeResult = ResponseResult.fail(rules, "无法通过policy: " + policy + " 和 isUsing: " + isUsing + " 获取端口规则！！");
+                            break;
+                        }
                         break;
-                    }
-                    break;
-                case ADDORREMOVE_ONE_PORTRULE:
-                     consumeResultBoolean= portRuleService.addOrRemoveOnePortRule(zoneName, datas.get(0), dataOpType);
-                    if (!consumeResultBoolean){
-                        consumeResult = ResponseResult.fail(rules,"无法"+ dataOpType +"端口规则");
+                    case ADDORREMOVE_ONE_PORTRULE:
+                        consumeResultBoolean = portRuleService.addOrRemoveOnePortRule(zoneName, datas.get(0), dataOpType);
+                        if (!consumeResultBoolean) {
+                            consumeResult = ResponseResult.fail(rules, "无法" + dataOpType + "端口规则");
+                            break;
+                        }
                         break;
-                    }
-                    break;
-                case ADDORREMOVE_BATCH_PORTRULES:
-                    consumeResultBoolean = portRuleService.addOrRemoveBatchPortRules(zoneName, datas, dataOpType);
-                    if (!consumeResultBoolean){
-                        consumeResult = ResponseResult.fail(rules,"无法批量"+ dataOpType +"端口规则");
+                    case ADDORREMOVE_BATCH_PORTRULES:
+                        consumeResultBoolean = portRuleService.addOrRemoveBatchPortRules(zoneName, datas, dataOpType);
+                        if (!consumeResultBoolean) {
+                            consumeResult = ResponseResult.fail(rules, "无法批量" + dataOpType + "端口规则");
+                            break;
+                        }
                         break;
-                    }
-                    break;
-                case UPDATE_ONE_PORTRULE:
-                    PortRule old = portRuleStreamEntry.getOld();
-                    consumeResultBoolean = portRuleService.updateOnePortRule(zoneName,  old, datas.get(0));
-                    if (!consumeResultBoolean){
-                        consumeResult = ResponseResult.fail(rules,"无法更新端口规则");
+                    case UPDATE_ONE_PORTRULE:
+                        PortRule old = portRuleStreamEntry.getOld();
+                        consumeResultBoolean = portRuleService.updateOnePortRule(zoneName, old, datas.get(0));
+                        if (!consumeResultBoolean) {
+                            consumeResult = ResponseResult.fail(rules, "无法更新端口规则");
+                            break;
+                        }
                         break;
-                    }
-                    break;
-                default:
-                    logger.error("不匹配任何规定的端口规则操作，{}", portRuleOpType);
-            }
-            consumeResult.setData(rules);
+                    default:
+                        logger.error("不匹配任何规定的端口规则操作，{}", portRuleOpType);
+                }
+                consumeResult.setData(rules);
 
-            // 加载防火墙使得配置生效
-            String status = consumeResult.getStatus();
-            if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())) {
+                // 加载防火墙使得配置生效
+                String status = consumeResult.getStatus();
+                if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())) {
+                    try {
+                        WallUtil.reloadFirewall(FireWallType.FIREWALLD);
+                        logger.info("重启防火墙 {} 成功", FireWallType.FIREWALLD);
+                    } catch (FirewallException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                // 确认消息处理完成
+                StreamEntryID entryID = streamEntry.getID();
+
+                // 发布数据到 stream key （001:pub）
+                String pubStreamKey = agentId + ":pub";
+
+                StreamEntryID streamEntryID = publishMessges(jedis, pubStreamKey, entryID, consumeResult);
+                jedis.xack(subStreamKey, groupName, entryID);
+                logger.info("agent节点：{} 向 streamKey为：{} 的stream发布 StreamEntryID：{}的消息作为响应成功", agentId, pubStreamKey, entryID);
+            } catch (RuntimeException e) {
+                logger.error("消费过程出错", e);
+                // 可选休眠再重试，避免疯循环
                 try {
-                    WallUtil.reloadFirewall(FireWallType.FIREWALLD);
-                    logger.info("重启防火墙 {} 成功",FireWallType.FIREWALLD);
-                } catch (FirewallException e) {
-                    throw new RuntimeException(e);
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {
                 }
             }
-
-            // 确认消息处理完成
-            StreamEntryID entryID = streamEntry.getID();
-            jedis.xack(subStreamKey, groupName, entryID);
-
-            // 发布数据到 stream key （001:pub）
-            String pubStreamKey = agentId +":pub";
-
-            StreamEntryID streamEntryID = publishMessges(jedis, pubStreamKey, entryID, consumeResult);
-            logger.info("agent节点：{} 向 streamKey为：{} 的stream发布 StreamEntryID：{}的消息作为响应成功",agentId,pubStreamKey,entryID);
         }
 
 
@@ -150,17 +163,17 @@ public class FirewallOpAdapter {
      * 当成功消费 agentId:sub （比如 001:sub）后，发布消息到agentId:pub（比如 001:pub）。作为master节点发布命令后，agent节点对master节点的响应，master节点需要去
      * 读取指定的streamKey，过滤出entryID对应的响应
      *
-     * @param jedis jedis链接
-     * @param streamKey 目标streamkey
-     * @param entryID 需要发布的StreamEntry的entryId
-     * @param consumeResult  消费 agentId:sub 的结果，可以看作一个响应
+     * @param jedis         jedis链接
+     * @param streamKey     目标streamkey
+     * @param entryID       需要发布的StreamEntry的entryId
+     * @param consumeResult 消费 agentId:sub 的结果，可以看作一个响应
      * @return
      */
     private static StreamEntryID publishMessges(Jedis jedis, String streamKey, StreamEntryID entryID, ResponseResult<List<PortRule>> consumeResult) {
         // todo 1.  发布消息时如何指定 entryID 完成，
         //  2. agent向master注册时需要设计agent_Id的生成规则，
         //  3. master的对于agent响应的数据是否需要持久化
-        //  4. master获取 agentId:pub 流数据逻辑
+        //  4. master获取 agentId:pub 流数据逻辑 master发布命令后去读取指定的steam即可获取 响应，可以考虑重复读取减少网络波动影响
         //  5. 多参数查询需要支持 isUsing 和policy 完成
         StreamProducer producer = new StreamProducer(jedis, streamKey);
         // 转化为map
@@ -222,12 +235,13 @@ public class FirewallOpAdapter {
         return portRuleOpType;
     }
 
+
     /**
      * 端口规则操作类型
      */
     private enum PortRuleOpType {
         QUERY_ALL_PORTRULE,
-//        QUERY_PORTRULES_BY_USINGSTATUS,
+        //        QUERY_PORTRULES_BY_USINGSTATUS,
 //        QUERY_PORTRULES_BY_POLICY,
         QUERY_PORTRULES_BY_POLICY_AND_USINGSTATUS,
         ADDORREMOVE_ONE_PORTRULE,
@@ -268,6 +282,7 @@ public class FirewallOpAdapter {
      * request_params
      * ts
      * 为必填参数，“非空”
+     *
      * @param map
      * @return
      */
@@ -293,13 +308,13 @@ public class FirewallOpAdapter {
             // 可选参数
             List<PortRule> data = new ArrayList<PortRule>();
             if (map.containsKey("data")) {
-                 data = objectMapper.readValue(map.get("data"), new TypeReference<List<PortRule>>() {
+                data = objectMapper.readValue(map.get("data"), new TypeReference<List<PortRule>>() {
                 });
             }
 
             // 可选参数
             PortRule old = new PortRule();
-            if (map.containsKey("old")){
+            if (map.containsKey("old")) {
                 old = objectMapper.readValue(map.get("old"), new TypeReference<PortRule>() {
                 });
             }

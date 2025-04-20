@@ -15,7 +15,7 @@ public class RedisUtil {
     // 默认连接参数
     private static final String DEFAULT_HOST = "vm79";
     private static final int DEFAULT_PORT = 6379;
-    private static final int DEFAULT_TIMEOUT = 2000;
+    private static final int DEFAULT_TIMEOUT = 120000;
     private static final String DEFAULT_PASSWORD = null;
     private static final int DEFAULT_DATABASE = 0;
 
@@ -115,47 +115,4 @@ public class RedisUtil {
         T doInRedis(Jedis jedis);
     }
 
-    // 以下是一些常用的Redis操作方法
-
-    /**
-     * 设置字符串值
-     */
-    public static String set(final String key, final String value) {
-        return execute(jedis -> jedis.set(key, value));
-    }
-
-    /**
-     * 获取字符串值
-     */
-    public static String get(final String key) {
-        return execute(jedis -> jedis.get(key));
-    }
-
-    /**
-     * 设置带过期时间的字符串值
-     */
-    public static String setex(final String key, final int seconds, final String value) {
-        return execute(jedis -> jedis.setex(key, seconds, value));
-    }
-
-    /**
-     * 删除键
-     */
-    public static Long del(final String... keys) {
-        return execute(jedis -> jedis.del(keys));
-    }
-
-    /**
-     * 检查键是否存在
-     */
-    public static Boolean exists(final String key) {
-        return execute(jedis -> jedis.exists(key));
-    }
-
-    /**
-     * 设置过期时间
-     */
-    public static Long expire(final String key, final int seconds) {
-        return execute(jedis -> jedis.expire(key, seconds));
-    }
 }
