@@ -1,10 +1,8 @@
 package cn.hedeoer.util;
 
-import java.net.Inet4Address;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 
 public class IpUtils {
@@ -235,6 +233,34 @@ public class IpUtils {
         }
 
         return null;
+    }
+
+    // 获取本机主IP（剔除127/本地回环等，仅获取常用公网或内网地址）
+    public static String getLocalIpAddress() {
+        try {
+            // 优先遍历所有网卡，适配复杂多网卡主机
+            Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+            while (ifaces.hasMoreElements()) {
+                NetworkInterface iface = ifaces.nextElement();
+                // 跳过down、虚拟、环回
+                if (!iface.isUp() || iface.isLoopback() || iface.isVirtual()) continue;
+                Enumeration<InetAddress> addrs = iface.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    InetAddress addr = addrs.nextElement();
+                    // 只要IPv4，且不是回环、链路本地和多播
+                    if (addr instanceof Inet4Address
+                            && !addr.isLoopbackAddress()
+                            && !addr.isLinkLocalAddress()
+                            && !addr.isMulticastAddress()) {
+                        return addr.getHostAddress();
+                    }
+                }
+            }
+            // 没有则兜底
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            return "unknown-ip";
+        }
     }
 
     public static void main(String[] args) {

@@ -1,14 +1,21 @@
 package cn.hedeoer.agent;
 
+import cn.hedeoer.pojo.OSType;
 import cn.hedeoer.util.AgentIdUtil;
+import cn.hedeoer.util.IpUtils;
+import cn.hedeoer.util.OperateSystemUtil;
 import cn.hedeoer.util.RedisUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
 
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * agent节点的心跳检测
@@ -16,6 +23,14 @@ import java.util.concurrent.ScheduledExecutorService;
 public class HeartBeat implements Runnable{
     private final String heartBeatHashTableName = "heartbeats";
     private static final Logger logger = LoggerFactory.getLogger(HeartBeat.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private Integer heartBeatGap;
+
+    public  HeartBeat(){}
+
+    public  HeartBeat(Integer heartBeatGap){
+        this.heartBeatGap = heartBeatGap;
+    }
 
 
     /**
@@ -30,21 +45,79 @@ public class HeartBeat implements Runnable{
         // 周期性执行hset命令，向master节点汇报心跳，比如 30秒
 
         try (Jedis jedis = RedisUtil.getJedis()) {
-            // 执行 TIME 命令
-            List<String> timeResult = jedis.time();
-            String seconds = timeResult.get(0);      // 秒级时间戳（字符串格式，需转换）
-            String microseconds = timeResult.get(1); // 微秒部分
-
             String agentId = AgentIdUtil.loadOrCreateUUID();
-            //If the field already exists, and the HSET just produced an update of the value, 0 is
-            // returned, otherwise if a new field is created 1 is returned.
-            long hset = jedis.hset(heartBeatHashTableName, agentId, seconds);
-
+            String agentNodeInfoSerializeStr  = getNeedReportInfo(jedis,agentId);
             // 心跳汇报 1745164416_0： 1745164416表示向master节点汇报时的时间戳，0表示非首次汇报，1表示首次汇报
-            long judgeFirstBeatFlag = jedis.hset(heartBeatHashTableName, agentId, seconds + "_" + hset);
+            jedis.hset(heartBeatHashTableName, agentId, agentNodeInfoSerializeStr);
 
-            logger.info("agentId：{} 向 master节点发送心跳，是否首次: {}",agentId, hset == 1);
+
+            logger.info("agentId：{} 向 master节点发送心跳，当前配置心跳时间间隔 : {} 秒",agentId, this.heartBeatGap);
         }
 
+    }
+
+    /**
+     * 获取需要汇报的信息，并使用jackson序列化为字符串
+     * @param jedis jedis客户端
+     * @param agentId agent唯一标识
+     * @return 如果序列化失败返回null
+     */
+    private String getNeedReportInfo(Jedis jedis, String agentId)  {
+
+        // 执行 TIME 命令
+        List<String> timeResult = jedis.time();
+        String seconds = timeResult.get(0);      // 秒级时间戳（字符串格式，需转换）
+
+        //If the field already exists, and the HSET just produced an update of the value, 0 is
+        // returned, otherwise if a new field is created 1 is returned.
+        long hset = jedis.hset(heartBeatHashTableName, agentId, seconds);
+        // 是否首次上报
+        boolean isFirstHeartBeat = hset == 1;
+
+        OSType osType = OperateSystemUtil.getOSType(null);
+        String osName = osType.getName();
+
+        // hostName
+        String hostName = OperateSystemUtil.getHostName();
+
+        String ip = IpUtils.getLocalIpAddress();
+        AgentNodeInfo build = AgentNodeInfo.builder()
+                .agentId(agentId)
+                .heartbeatTimestamp(seconds)
+                .isFirstHeartbeat(isFirstHeartBeat)
+                // 上报存活
+                .isActive(true)
+                .osName(osName)
+                .hostName(hostName)
+                .ip(ip)
+                .build();
+
+        String result = null;
+        try {
+            result = objectMapper.writeValueAsString(build);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+
+
+        return result;
+    }
+
+    /**
+     * agent节点向master节点汇报心跳时，需要汇报的信息
+     * 上报心跳时间戳，是否首次上报， 是否存活，操作系统，主机名，节点ip
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class AgentNodeInfo {
+        private String agentId;
+        private String heartbeatTimestamp;
+        private Boolean isFirstHeartbeat;
+        private Boolean isActive;
+        private String osName;
+        private String hostName;
+        private String ip;
     }
 }

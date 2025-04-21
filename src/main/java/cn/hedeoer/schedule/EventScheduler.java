@@ -13,7 +13,8 @@ public class EventScheduler {
      * agent节点向master周期汇报心跳
      */
     public static void scheduleHeartBeat(){
-        HeartBeat heartBeat = new HeartBeat();
-        scheduler.scheduleAtFixedRate(heartBeat, 0L, 30, TimeUnit.SECONDS);
+        Integer heartBeatGap = 30;
+        HeartBeat heartBeat = new HeartBeat(heartBeatGap);
+        scheduler.scheduleAtFixedRate(heartBeat, 0L, heartBeatGap, TimeUnit.SECONDS);
     }
 }

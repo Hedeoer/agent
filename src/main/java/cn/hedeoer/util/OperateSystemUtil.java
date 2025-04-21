@@ -3,6 +3,7 @@ package cn.hedeoer.util;
 import cn.hedeoer.pojo.OSType;
 
 import java.io.*;
+import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -248,5 +249,41 @@ public class OperateSystemUtil {
         info.put("java.vm.vendor", getJVMVendor());
 
         return info;
+    }
+
+    /**
+     * 获取主机名，兼容多操作系统
+     */
+    public static String getHostName() {
+        try {
+            // 通用方法优先（几乎所有平台有效）
+            String hostname = InetAddress.getLocalHost().getHostName();
+            if (hostname != null && !hostname.isBlank() && !hostname.equals("localhost")) {
+                return hostname;
+            }
+        } catch (Exception ignored) {
+        }
+        // 如果上面失败，再根据操作系统类型特殊处理
+        OSType osType = getOSType(null);
+        String hostname = null;
+        switch (osType) {
+            case WINDOWS:
+                hostname = System.getenv("COMPUTERNAME");
+                break;
+            case LINUX:
+            case UNIX:
+            case SOLARIS:
+            case MAC:
+                hostname = System.getenv("HOSTNAME");
+                break;
+            default:
+                // 用尽所有办法都没有，那就unknown
+                hostname = "unknown-host";
+        }
+        // 防御性，如果还没有
+        if (hostname == null || hostname.isBlank()) {
+            hostname = "unknown-host";
+        }
+        return hostname;
     }
 }

@@ -9,6 +9,7 @@ import cn.hedeoer.pojo.FireWallType;
 import cn.hedeoer.subscribe.SimpleStreamConsumer;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;
+import cn.hedeoer.util.AgentIdUtil;
 import cn.hedeoer.util.RedisUtil;
 import cn.hedeoer.util.WallUtil;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -41,8 +42,8 @@ public class FirewallOpAdapter implements Runnable {
     @Override
     public void run() {
 
-        // todo 需要获取agent节点的唯一标识
-        String agentId = "001";
+        // 获取agent节点的唯一标识
+        String agentId = AgentIdUtil.loadOrCreateUUID();
         String subStreamKey = agentId + ":sub";
         String groupName = "firewall_" + subStreamKey + "_group";
         String consumerName = "firewall_" + subStreamKey + "_consumer";
@@ -170,10 +171,10 @@ public class FirewallOpAdapter implements Runnable {
      * @return
      */
     private static StreamEntryID publishMessges(Jedis jedis, String streamKey, StreamEntryID entryID, ResponseResult<List<PortRule>> consumeResult) {
-        // todo 1.  发布消息时如何指定 entryID 完成，
-        //  2. agent向master注册时需要设计agent_Id的生成规则，
-        //  3. master的对于agent响应的数据是否需要持久化
-        //  4. master获取 agentId:pub 流数据逻辑 master发布命令后去读取指定的steam即可获取 响应，可以考虑重复读取减少网络波动影响
+        //  1.  发布消息时如何指定 entryID 完成，
+        //  2. agent向master注册时需要设计agent_Id的生成规则 完成，
+        //  3. master的对于agent响应的数据是否需要持久化，需要，比如请求全部的端口规则
+        //  todo 4. master获取 agentId:pub 流数据逻辑 master发布命令后去读取指定的steam即可获取 响应，可以考虑重复读取减少网络波动影响
         //  5. 多参数查询需要支持 isUsing 和policy 完成
         StreamProducer producer = new StreamProducer(jedis, streamKey);
         // 转化为map

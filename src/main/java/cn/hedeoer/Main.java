@@ -27,7 +27,7 @@ public class Main {
         EventScheduler.scheduleHeartBeat();
 
 
-        // todo master节点的接收来自agent节点的心跳
+        // master节点的接收来自agent节点的心跳
         // 将所有汇报心跳的agentId数据持久化
         // 如何区分agent节点心跳是否是首次？如果是首次，需要持久化agent节点信息;不是首次，需要判断agent节点是否离线？
         //     通过对比redis服务器时间戳和心跳汇报的时间戳间隔，比如超过30秒，表示agent节点离线
