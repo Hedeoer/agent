@@ -41,17 +41,24 @@ public class HeartBeat implements Runnable{
         // 向master注册(通过使用 redis hash方式， hash表名字 heartbeats, key为agentId, vaule为向master节点上报时的时间戳)
         // 获取redis服务器本地时间戳，避免一旦集群里服务器时间不同步，心跳状态的判断就容易出错
         // 周期性执行hset命令，向master节点汇报心跳，比如 30秒
+        sendHearBeat();
 
+    }
+
+    public boolean sendHearBeat() {
         try (Jedis jedis = RedisUtil.getJedis()) {
+            boolean res = false;
             String agentId = AgentIdUtil.loadOrCreateUUID();
             String agentNodeInfoSerializeStr  = getNeedReportInfo(jedis,agentId);
             // 心跳汇报 1745164416_0： 1745164416表示向master节点汇报时的时间戳，0表示非首次汇报，1表示首次汇报
-            jedis.hset(heartBeatHashTableName, agentId, agentNodeInfoSerializeStr);
-
+            long hset = jedis.hset(heartBeatHashTableName, agentId, agentNodeInfoSerializeStr);
+            if (hset == 0 || hset == 1) {
+                res = true;
+            }
 
             logger.info("agentId：{} 向 master节点发送心跳，当前配置心跳时间间隔 : {} 秒",agentId, this.heartBeatGap);
+            return res;
         }
-
     }
 
     /**

@@ -1,5 +1,6 @@
 package cn.hedeoer.subscribe.streamadapter;
 
+import cn.hedeoer.agent.HeartBeat;
 import cn.hedeoer.common.ResponseResult;
 import cn.hedeoer.common.ResponseStatus;
 import cn.hedeoer.firewalld.PortRule;
@@ -44,7 +45,7 @@ public class FirewallOpAdapter implements Runnable {
 
         // 获取agent节点的唯一标识
         String agentId = AgentIdUtil.loadOrCreateUUID();
-        String subStreamKey = agentId + ":sub";
+        String subStreamKey = "sub:" + agentId;
         String groupName = "firewall_" + subStreamKey + "_group";
         String consumerName = "firewall_" + subStreamKey + "_consumer";
 
@@ -119,6 +120,13 @@ public class FirewallOpAdapter implements Runnable {
                         consumeResultBoolean = portRuleService.updateOnePortRule(zoneName, old, datas.get(0));
                         if (!consumeResultBoolean) {
                             consumeResult = ResponseResult.fail(rules, "无法更新端口规则");
+                            break;
+                        }
+                        break;
+                    case OPTIONS:
+                        consumeResultBoolean = new HeartBeat().sendHearBeat();
+                        if (!consumeResultBoolean) {
+                            consumeResult = ResponseResult.fail(rules, "无法手动触发心跳汇报给主节点");
                             break;
                         }
                         break;
@@ -231,6 +239,8 @@ public class FirewallOpAdapter implements Runnable {
             // 更新
         } else if (dataOpType.equals("update")) {
             portRuleOpType = PortRuleOpType.UPDATE_ONE_PORTRULE;
+        } else if(dataOpType.equals("options")){
+            portRuleOpType = PortRuleOpType.OPTIONS;
         }
 
         return portRuleOpType;
@@ -247,7 +257,9 @@ public class FirewallOpAdapter implements Runnable {
         QUERY_PORTRULES_BY_POLICY_AND_USINGSTATUS,
         ADDORREMOVE_ONE_PORTRULE,
         ADDORREMOVE_BATCH_PORTRULES,
-        UPDATE_ONE_PORTRULE;
+        UPDATE_ONE_PORTRULE,
+        // 手动发送心跳
+        OPTIONS;
     }
 
     @NoArgsConstructor
