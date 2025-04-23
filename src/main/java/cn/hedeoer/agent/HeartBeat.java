@@ -1,10 +1,8 @@
 package cn.hedeoer.agent;
 
+import ch.qos.logback.core.util.TimeUtil;
 import cn.hedeoer.pojo.OSType;
-import cn.hedeoer.util.AgentIdUtil;
-import cn.hedeoer.util.IpUtils;
-import cn.hedeoer.util.OperateSystemUtil;
-import cn.hedeoer.util.RedisUtil;
+import cn.hedeoer.util.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
@@ -21,7 +19,7 @@ import java.util.List;
  * agent节点的心跳检测
  */
 public class HeartBeat implements Runnable{
-    private final String heartBeatHashTableName = "heartbeats";
+    private final String heartBeatHashTableName = "firewall:heartbeats";
     private static final Logger logger = LoggerFactory.getLogger(HeartBeat.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private Integer heartBeatGap;
@@ -90,6 +88,10 @@ public class HeartBeat implements Runnable{
                 .osName(osName)
                 .hostName(hostName)
                 .ip(ip)
+                .clientVersion(VersionHelper.getVersion())
+                .cpuUsage(OperateSystemUtil.getCpuUsage())
+                .memoryUsage(OperateSystemUtil.getMemoryUsage())
+                .diskUsage(OperateSystemUtil.getAvgDiskUsage())
                 .build();
 
         String result = null;
@@ -106,7 +108,16 @@ public class HeartBeat implements Runnable{
     /**
      * agent节点向master节点汇报心跳时，需要汇报的信息
      * 上报心跳时间戳，是否首次上报， 是否存活，操作系统，主机名，节点ip
+     *
      */
+    //   /** CPU利用率 */
+    //  cpuUsage?: number
+    //  /** 内存利用率 */
+    //  memoryUsage?: number
+    //  /** 磁盘利用率 */
+    //  diskUsage?: number
+    //  /** 客户端版本 */
+    //  clientVersion?: string
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -119,5 +130,9 @@ public class HeartBeat implements Runnable{
         private String osName;
         private String hostName;
         private String ip;
+        private String cpuUsage;
+        private String memoryUsage;
+        private String diskUsage;
+        private String clientVersion;
     }
 }

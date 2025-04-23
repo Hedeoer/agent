@@ -1,14 +1,21 @@
 package cn.hedeoer.util;
 
 import cn.hedeoer.pojo.OSType;
+import oshi.SystemInfo;
+import oshi.hardware.CentralProcessor;
+import oshi.hardware.GlobalMemory;
+import oshi.software.os.FileSystem;
+import oshi.software.os.OSFileStore;
 
 import java.io.*;
 import java.net.InetAddress;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 public class OperateSystemUtil {
+    private static final SystemInfo systemInfo = new SystemInfo();
     /*
     * 用于判断宿主机的操作系统类型
     *
@@ -285,5 +292,45 @@ public class OperateSystemUtil {
             hostname = "unknown-host";
         }
         return hostname;
+    }
+
+    // 获取CPU总使用率（需要等待一次采样，否则恒0.0）
+    public static String getCpuUsage() {
+        double cpuLoad = 0;
+        try {
+            CentralProcessor processor = systemInfo.getHardware().getProcessor();
+            long[] prevTicks = processor.getSystemCpuLoadTicks();
+            Thread.sleep(1000); // 等待1秒采样
+            long[] ticks = processor.getSystemCpuLoadTicks();
+            cpuLoad = processor.getSystemCpuLoadBetweenTicks(prevTicks);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return String.format("%.2f",cpuLoad * 100);
+    }
+    // 获取物理内存使用率
+    public static String getMemoryUsage() {
+        GlobalMemory memory = systemInfo.getHardware().getMemory();
+        long total = memory.getTotal();
+        long available = memory.getAvailable();
+        long used = total - available;
+        if (total == 0) return "0.0";
+        return String.format("%.2f",used * 100.0 / total);
+    }
+    // 获取所有分区磁盘使用率平均值（如需主分区可只取第一个）
+    public static String getAvgDiskUsage() {
+        FileSystem fileSystem = systemInfo.getOperatingSystem().getFileSystem();
+        List<OSFileStore> fileStores = fileSystem.getFileStores();
+        double total = 0.0;
+        double used = 0.0;
+        for (OSFileStore fs : fileStores) {
+            long t = fs.getTotalSpace();
+            long u = t - fs.getUsableSpace();
+            if (t <= 0) continue;
+            total += t;
+            used += u;
+        }
+        if (total == 0) return "0.0";
+        return String.format("%.2f",used * 100.0 / total);
     }
 }
