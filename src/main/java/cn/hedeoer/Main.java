@@ -1,19 +1,17 @@
 package cn.hedeoer;
 
 import cn.hedeoer.agent.HeartBeat;
-import cn.hedeoer.schedule.EventScheduler;
 import cn.hedeoer.subscribe.streamadapter.FirewallOpAdapter;
-import cn.hedeoer.util.AgentIdUtil;
-import cn.hedeoer.util.FirewallDetector;
-import cn.hedeoer.util.OperateSystemUtil;
 import cn.hedeoer.util.ThreadPoolUtil;
 
-import java.util.Map;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
     public static void main(String[] args) {
 
+/*
         // 获取线程池
         ThreadPoolExecutor commonPool = ThreadPoolUtil.getCommonPool();
 
@@ -35,8 +33,24 @@ public class Main {
         // 2.启动新线程，不断消费来自master节点的命令
         FirewallOpAdapter adapter = new FirewallOpAdapter();
         commonPool.execute(adapter);
+*/
 
 
+        // 1. 创建独立的定时任务线程池处理心跳
+        ScheduledThreadPoolExecutor scheduledPool =
+                ThreadPoolUtil.createScheduledThreadPool(1, "heartbeat-pool");
+
+        // 2. 使用独立的线程池处理消费任务
+        ThreadPoolExecutor consumerPool =
+                ThreadPoolUtil.createThreadPool(1, 1, 60, TimeUnit.SECONDS,
+                        1, "consumer-pool");
+
+        // 3. 分别启动任务
+        HeartBeat heartBeat = new HeartBeat(30);  // 30秒间隔
+        scheduledPool.scheduleAtFixedRate(heartBeat, 0, 30, TimeUnit.SECONDS);
+
+        FirewallOpAdapter adapter = new FirewallOpAdapter();
+        consumerPool.execute(adapter);
 
 
 
