@@ -4,9 +4,7 @@ import cn.hedeoer.agent.HeartBeat;
 import cn.hedeoer.subscribe.streamadapter.FirewallOpAdapter;
 import cn.hedeoer.util.ThreadPoolUtil;
 
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class Main {
     public static void main(String[] args) {
@@ -46,13 +44,11 @@ public class Main {
                         1, "consumer-pool");
 
         // 3. 分别启动任务
-        HeartBeat heartBeat = new HeartBeat(30);  // 30秒间隔
-        scheduledPool.scheduleAtFixedRate(heartBeat, 0, 30, TimeUnit.SECONDS);
-
         FirewallOpAdapter adapter = new FirewallOpAdapter();
         consumerPool.execute(adapter);
 
-
+        HeartBeat heartBeat = new HeartBeat(30);  // 30秒间隔
+        scheduledPool.scheduleAtFixedRate(heartBeat, 0, 30, TimeUnit.SECONDS);
 
     }
 }

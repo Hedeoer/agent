@@ -49,13 +49,24 @@ public class StreamConsumer {
             }
         }
 
-        // 2. 如果 Stream 不存在，添加一条数据初始化
+        // 2. 如果 Stream 不存在，创建一个空的 Stream
         if (!streamExists) {
-            Map<String, String> init = new HashMap<>();
-            init.put("init", "init");
-            jedis.xadd(streamKey, StreamEntryID.NEW_ENTRY, init);
-            logger.info("Stream created: {}", streamKey);
+            try {
+                // 使用 XGROUP CREATE 命令的 MKSTREAM 选项创建空流
+                jedis.xgroupCreate(streamKey, groupName, null, true);
+                logger.info("Stream created without initial data: {}", streamKey);
+            } catch (Exception e) {
+                // 如果消费者组已存在，只需创建流
+                if (e.getMessage().contains("BUSYGROUP")) {
+                    // 直接创建空流 (在新版 Jedis 中)
+                    jedis.xadd(streamKey, StreamEntryID.NEW_ENTRY, new HashMap<>());
+                    logger.info("Stream already exists, consumer group already created: {}", streamKey);
+                } else {
+                    throw e;
+                }
+            }
         }
+
 
         // 3. 检查消费者组是否存在
         boolean groupExists = false;
@@ -81,8 +92,6 @@ public class StreamConsumer {
                     throw e;
                 }
             }
-        } else {
-            logger.info("Consumer group already exists: {}", groupName);
         }
     }
 
@@ -129,32 +138,5 @@ public class StreamConsumer {
 
     public void close() {
         RedisUtil.close(jedis);
-    }
-
-    public static void main(String[] args) {
-        Jedis jedis = RedisUtil.getJedis();
-        StreamConsumer consumer = new StreamConsumer(
-                jedis, "test1", "orderConsumers", "consumer1");
-
-        logger.info("Starting to consume messages...");
-
-        // 消费10轮，每轮最多5条消息，阻塞时间2秒
-        for (int i = 0; i < 10; i++) {
-            List<StreamEntry> messages = consumer.consumeNewMessages(5, 2000);
-
-            if (messages.isEmpty()) {
-                logger.info("No new messages in round " + (i + 1));
-            } else {
-                logger.info("Consumed " + messages.size() + " messages in round " + (i + 1));
-            }
-
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        consumer.close();
     }
 }

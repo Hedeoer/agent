@@ -49,6 +49,7 @@ public class HeartBeat implements Runnable{
         try (Jedis jedis = RedisUtil.getJedis()) {
             boolean res = false;
             String agentId = AgentIdUtil.loadOrCreateUUID();
+
             String agentNodeInfoSerializeStr  = getNeedReportInfo(jedis,agentId);
             // 心跳汇报 1745164416_0： 1745164416表示向master节点汇报时的时间戳，0表示非首次汇报，1表示首次汇报
             long hset = jedis.hset(heartBeatHashTableName, agentId, agentNodeInfoSerializeStr);
@@ -63,18 +64,19 @@ public class HeartBeat implements Runnable{
 
     /**
      * 获取需要汇报的信息，并使用jackson序列化为字符串
-     * @param jedis jedis客户端
+     * @param jedis jedis
      * @param agentId agent唯一标识
      * @return 如果序列化失败返回null
      */
     private String getNeedReportInfo(Jedis jedis, String agentId)  {
+
 
         // 执行 TIME 命令
         List<String> timeResult = jedis.time();
         String seconds = timeResult.get(0);      // 秒级时间戳（字符串格式，需转换）
 
         // 是否首次上报
-        boolean isFirstHeartBeat = jedis.hget(heartBeatHashTableName, agentId).equals("nil");
+        boolean isFirstHeartBeat = jedis.hget(heartBeatHashTableName, agentId) == null;
 
         OSType osType = OperateSystemUtil.getOSType(null);
         String osName = osType.getName();

@@ -60,10 +60,12 @@ public class FirewallOpAdapter implements Runnable {
         while (true) {
             // 每次循环都重新获取 Jedis，用完就关闭,这样即使某次消费中 Jedis 发生了超时、阻塞断开、协议污染，下一轮会用全新连接，最大化避免脏连接带来的所有潜在问题
             try (Jedis jedis = RedisUtil.getJedis()) {
-                StreamConsumer consumer = new StreamConsumer(jedis, subStreamKey, groupName, consumerName);
-                List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 0);
-//                List<StreamEntry> streamEntries1 = simpleStreamConsumer.readNewMessages(1, 0);
+                StreamConsumer consumer = new StreamConsumer(jedis, pubStreamKey, groupName, consumerName);
+
+                //本次循环消费消息时最多阻塞1秒
+                List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 1000);
                 if (streamEntries.isEmpty()) {
+//                    logger.info("streamKey:{}, 目前无新消息",pubStreamKey);
                     continue;
                 }
                 StreamEntry streamEntry = streamEntries.get(0);
@@ -150,9 +152,9 @@ public class FirewallOpAdapter implements Runnable {
                 StreamEntryID entryID = streamEntry.getID();
 
                 // 发布数据到 stream key （pub:001）
-                StreamEntryID streamEntryID = publishMessges(jedis, pubStreamKey, entryID, consumeResult);
-                jedis.xack(subStreamKey, groupName, entryID);
-                logger.info("agent节点：{} 向 streamKey为：{} 的stream发布 StreamEntryID：{}的消息作为响应成功", agentId, pubStreamKey, entryID);
+                StreamEntryID streamEntryID = publishMessges(jedis, subStreamKey, entryID, consumeResult);
+                jedis.xack(pubStreamKey, groupName, entryID);
+                logger.info("agent节点：{} 向 streamKey为：{} 的stream发布 StreamEntryID：{}的消息作为响应成功", agentId, subStreamKey, entryID);
             } catch (RuntimeException e) {
                 logger.error("消费过程出错", e);
                 // 可选休眠再重试，避免疯循环
@@ -218,14 +220,14 @@ public class FirewallOpAdapter implements Runnable {
 
         PortRuleOpType portRuleOpType = null;
         // 查询操作
-        if ("query".equals(dataOpType)) {
+        if ("QUERY".equals(dataOpType)) {
             if (requestParams.containsKey("isUsing") || requestParams.containsKey("policy")) {
                 portRuleOpType = PortRuleOpType.QUERY_PORTRULES_BY_POLICY_AND_USINGSTATUS;
             } else {
                 portRuleOpType = PortRuleOpType.QUERY_ALL_PORTRULE;
             }
             // 新增和删除
-        } else if (dataOpType.equals("insert") || dataOpType.equals("delete")) {
+        } else if (dataOpType.equals("INSERT") || dataOpType.equals("DELETE")) {
             int size = data.size();
             if (size > 1) {
                 portRuleOpType = PortRuleOpType.ADDORREMOVE_BATCH_PORTRULES;
@@ -235,9 +237,9 @@ public class FirewallOpAdapter implements Runnable {
                 logger.warn("操作：{}, 所需要的数据为空，无法进行", dataOpType);
             }
             // 更新
-        } else if (dataOpType.equals("update")) {
+        } else if (dataOpType.equals("UPDATE")) {
             portRuleOpType = PortRuleOpType.UPDATE_ONE_PORTRULE;
-        } else if(dataOpType.equals("options")){
+        } else if(dataOpType.equals("OPTIONS")){
             portRuleOpType = PortRuleOpType.OPTIONS;
         }
 
