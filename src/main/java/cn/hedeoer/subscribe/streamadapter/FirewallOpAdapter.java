@@ -47,7 +47,8 @@ public class FirewallOpAdapter implements Runnable {
         String agentId = AgentIdUtil.loadOrCreateUUID();
         String subStreamKey = "sub:" + agentId;
         String groupName = "firewall_" + subStreamKey + "_group";
-        String consumerName = "firewall_" + subStreamKey + "_consumer";
+        String consumerName = groupName + "_consumer";
+        String pubStreamKey = "pub:" + agentId;
 
 //            SimpleStreamConsumer simpleStreamConsumer = new SimpleStreamConsumer(jedis, subStreamKey);
 
@@ -136,7 +137,6 @@ public class FirewallOpAdapter implements Runnable {
                 consumeResult.setData(rules);
 
                 // 加载防火墙使得配置生效
-                String status = consumeResult.getStatus();
                 if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())) {
                     try {
                         WallUtil.reloadFirewall(FireWallType.FIREWALLD);
@@ -149,9 +149,7 @@ public class FirewallOpAdapter implements Runnable {
                 // 确认消息处理完成
                 StreamEntryID entryID = streamEntry.getID();
 
-                // 发布数据到 stream key （001:pub）
-                String pubStreamKey = agentId + ":pub";
-
+                // 发布数据到 stream key （pub:001）
                 StreamEntryID streamEntryID = publishMessges(jedis, pubStreamKey, entryID, consumeResult);
                 jedis.xack(subStreamKey, groupName, entryID);
                 logger.info("agent节点：{} 向 streamKey为：{} 的stream发布 StreamEntryID：{}的消息作为响应成功", agentId, pubStreamKey, entryID);

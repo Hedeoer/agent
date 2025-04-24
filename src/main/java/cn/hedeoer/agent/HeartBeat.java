@@ -38,7 +38,7 @@ public class HeartBeat implements Runnable{
     public void run() {
 
         // agent节点的心跳汇报
-        // 向master注册(通过使用 redis hash方式， hash表名字 heartbeats, key为agentId, vaule为向master节点上报时的时间戳)
+        // 向master注册(通过使用 redis hash方式， hash表名字 firewall:heartbeats, key为agentId, vaule为向master节点上报时的时间戳)
         // 获取redis服务器本地时间戳，避免一旦集群里服务器时间不同步，心跳状态的判断就容易出错
         // 周期性执行hset命令，向master节点汇报心跳，比如 30秒
         sendHearBeat();
@@ -73,11 +73,8 @@ public class HeartBeat implements Runnable{
         List<String> timeResult = jedis.time();
         String seconds = timeResult.get(0);      // 秒级时间戳（字符串格式，需转换）
 
-        //If the field already exists, and the HSET just produced an update of the value, 0 is
-        // returned, otherwise if a new field is created 1 is returned.
-        long hset = jedis.hset(heartBeatHashTableName, agentId, seconds);
         // 是否首次上报
-        boolean isFirstHeartBeat = hset == 1;
+        boolean isFirstHeartBeat = jedis.hget(heartBeatHashTableName, agentId).equals("nil");
 
         OSType osType = OperateSystemUtil.getOSType(null);
         String osName = osType.getName();
