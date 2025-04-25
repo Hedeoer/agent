@@ -1,5 +1,7 @@
 package cn.hedeoer.common;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Builder;
 import lombok.Data;
 
@@ -117,7 +119,14 @@ public class ResponseResult<T> {
 
             // 如果data是集合类型
             if (data instanceof Collection) {
-                Collection<?> collection = (Collection<?>) data;
+                ObjectMapper objectMapper = new ObjectMapper();
+                try {
+                    // todo use jackson to covert collector
+                    dataStr = objectMapper.writeValueAsString(data);
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException(e);
+                }
+                /*Collection<?> collection = (Collection<?>) data;
                 StringBuilder sb = new StringBuilder("[");
                 boolean first = true;
 
@@ -130,7 +139,7 @@ public class ResponseResult<T> {
                 }
 
                 sb.append("]");
-                dataStr = sb.toString();
+                dataStr = sb.toString();*/
             }
             // 如果data是Map类型
             else if (data instanceof Map) {

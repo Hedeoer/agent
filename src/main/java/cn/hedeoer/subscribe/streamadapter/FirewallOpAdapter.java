@@ -7,7 +7,6 @@ import cn.hedeoer.firewalld.PortRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.firewalld.op.PortRuleServiceImpl;
 import cn.hedeoer.pojo.FireWallType;
-import cn.hedeoer.subscribe.SimpleStreamConsumer;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;
 import cn.hedeoer.util.AgentIdUtil;
@@ -39,6 +38,7 @@ import java.util.Map;
 public class FirewallOpAdapter implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(FirewallOpAdapter.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public void run() {
