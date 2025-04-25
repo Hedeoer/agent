@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Stream;
 
 /**
  * Linux端口使用情况查询工具类
@@ -36,7 +35,7 @@ public class PortUsageUtil {
             ProcessResult result = new ProcessExecutor()
                     .command("sudo", "lsof", "-w", "-i", ":" + port)
                     .readOutput(true)
-                    .timeout(5, TimeUnit.SECONDS)
+                    .timeout(10, TimeUnit.SECONDS)
                     .execute();
 
             // 解析输出结果
