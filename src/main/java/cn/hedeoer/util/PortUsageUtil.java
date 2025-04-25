@@ -1,11 +1,14 @@
 package cn.hedeoer.util;
 
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.net.ServerSocket;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -14,41 +17,129 @@ import java.util.concurrent.TimeoutException;
  */
 public class PortUsageUtil {
 
+    private static final Logger logger = LoggerFactory.getLogger(PortUsageUtil.class);
+
     /**
      * 查询指定端口的使用情况
      *
      * @param port 端口号
      * @return 端口使用情况列表
-     * @throws IOException          执行命令时发生IO异常
-     * @throws InterruptedException 执行被中断
-     * @throws TimeoutException     执行超时
+     * @throws IllegalArgumentException 端口范围无效时抛出
      */
     private static List<PortUsage> checkPortUsage(int port) {
-        try {
-            // 校验端口范围
-            if (port < 1 || port > 65535) {
-                throw new IllegalArgumentException("Port must be between 1 and 65535");
-            }
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("Port must be between 1 and 65535");
+        }
 
-            // 执行lsof命令
-            // -w表示获取完整进程名字
-            ProcessResult result = new ProcessExecutor()
-                    .command("sudo", "lsof", "-w", "-i", ":" + port)
+        List<PortUsage> result = Collections.emptyList();
+
+        try {
+            ProcessExecutor executor = new ProcessExecutor()
+                    .command("lsof", "-w", "-i", ":" + port)
                     .readOutput(true)
-                    .timeout(10, TimeUnit.SECONDS)
+                    .timeout(8, TimeUnit.SECONDS);
+
+            try {
+                ProcessResult processResult = executor.execute();
+                String output = processResult.outputUTF8();
+                result = parseOutput(output);
+            } catch (TimeoutException e) {
+                result = checkPortUsageAlternative(port);
+            } catch (Exception e) {
+                try {
+                    ProcessResult sudoResult = executor
+                            .command("sudo", "lsof", "-w", "-i", ":" + port)
+                            .execute();
+                    String output = sudoResult.outputUTF8();
+                    result = parseOutput(output);
+                } catch (TimeoutException te) {
+                    result = checkPortUsageAlternative(port);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to check port usage for port {}: {}", port, e.getMessage());
+        }
+
+        return result;
+    }
+    /**
+     * 备用方法：使用Java网络API或其他命令检查端口使用情况
+     */
+    private static List<PortUsage> checkPortUsageAlternative(int port) {
+        List<PortUsage> result = new ArrayList<>();
+
+        try {
+            // 使用netstat命令作为备用，通常执行更快
+            ProcessResult processResult = new ProcessExecutor()
+                    .command("bash", "-c", "netstat -anp | grep :" + port)
+                    .readOutput(true)
+                    .timeout(3, TimeUnit.SECONDS)
                     .execute();
 
-            // 解析输出结果
-            String output = result.outputUTF8();
-            return parseOutput(output);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        } catch (TimeoutException e) {
-            throw new RuntimeException(e);
+            String output = processResult.outputUTF8();
+            result = parseNetstatOutput(output);
+        } catch (Exception e) {
+            // 最后一种方法：使用Java的Socket API测试端口是否被占用
+            try (ServerSocket serverSocket = new ServerSocket(port)) {
+                // 如果能正常绑定，说明端口未被占用
+            } catch (IOException ioe) {
+                // 端口被占用
+                PortUsage usage = new PortUsage();
+                usage.setCommand("未知程序");
+                usage.setPid(-1);
+                usage.setUser("未知");
+                usage.setFd("未知");
+                usage.setType("未知");
+                usage.setDevice("未知");
+                usage.setSizeOff("未知");
+                usage.setNode("未知");
+                usage.setName(":" + port);
+                result.add(usage);
+            }
         }
+
+        return result;
     }
+
+    /**
+     * 解析netstat命令输出
+     *
+     * @param output netstat命令的输出字符串
+     * @return 包含端口使用信息的列表
+     */
+    private static List<PortUsage> parseNetstatOutput(String output) {
+        List<PortUsage> result = new ArrayList<>();
+        if (output == null || output.trim().isEmpty()) {
+            return result;
+        }
+
+        String[] lines = output.split("\\r?\\n");
+        for (String line : lines) {
+            line = line.trim();
+            if (line.isEmpty() || line.startsWith("Proto")) {
+                continue;
+            }
+            try {
+                String[] parts = line.split("\\s+");
+                if (parts.length < 6) continue;
+                PortUsage usage = new PortUsage();
+                usage.setCommand(parts.length >= 7 && parts[6].contains("/") ? parts[6].split("/", 2)[1] : "未知");
+                usage.setPid(parts.length >= 7 && parts[6].contains("/") ? Integer.parseInt(parts[6].split("/", 2)[0]) : -1);
+                usage.setUser("未知");
+                usage.setFd("未知");
+                usage.setType(parts[0]);
+                usage.setDevice("未知");
+                usage.setSizeOff("未知");
+                usage.setNode(parts[5]);
+                usage.setName(parts[3]);
+                result.add(usage);
+            } catch (Exception e) {
+                logger.debug("Error parsing netstat output line: {}", line, e);
+            }
+        }
+        return result;
+    }
+
 
     /**
      * 获取监听端口的进程名字
