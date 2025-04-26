@@ -105,14 +105,14 @@ public class FirewallOpAdapter implements Runnable {
                         }
                         break;
                     case ADDORREMOVE_ONE_PORTRULE:
-                        consumeResultBoolean = portRuleService.addOrRemoveOnePortRule(zoneName, datas.get(0), dataOpType);
+                        consumeResultBoolean = portRuleService.addOrRemoveOnePortRule(zoneName, datas.get(0), dataOpType.toLowerCase());
                         if (!consumeResultBoolean) {
                             consumeResult = ResponseResult.fail(rules, "无法" + dataOpType + "端口规则");
                             break;
                         }
                         break;
                     case ADDORREMOVE_BATCH_PORTRULES:
-                        consumeResultBoolean = portRuleService.addOrRemoveBatchPortRules(zoneName, datas, dataOpType);
+                        consumeResultBoolean = portRuleService.addOrRemoveBatchPortRules(zoneName, datas, dataOpType.toLowerCase());
                         if (!consumeResultBoolean) {
                             consumeResult = ResponseResult.fail(rules, "无法批量" + dataOpType + "端口规则");
                             break;
