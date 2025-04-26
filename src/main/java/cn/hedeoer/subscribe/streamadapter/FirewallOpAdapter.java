@@ -304,17 +304,17 @@ public class FirewallOpAdapter implements Runnable {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
             // 非空参数
-            String agentId = map.get("agent_id");
-            String agentComponentType = map.get("agent_component_type");
-            String dataOpType = map.get("data_op_type");
-            Map<String, String> requestParams = objectMapper.readValue(map.get("request_params"), new TypeReference<Map<String, String>>() {
+            String agentId = map.get("agentId");
+            String agentComponentType = map.get("agentComponentType");
+            String dataOpType = map.get("dataOpType");
+            Map<String, String> requestParams = objectMapper.readValue(map.get("requestParams"), new TypeReference<Map<String, String>>() {
             });
             String ts = map.get("ts");
 
             // 可选参数
             List<String> primaryKeyColumns = new ArrayList<String>();
-            if (map.containsKey("primary_key_columns")) {
-                primaryKeyColumns = objectMapper.readValue(map.get("primary_key_columns"), new TypeReference<List<String>>() {
+            if (map.containsKey("primaryKeyColumns")) {
+                primaryKeyColumns = objectMapper.readValue(map.get("primaryKeyColumns"), new TypeReference<List<String>>() {
                 });
             }
 
