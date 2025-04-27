@@ -1,21 +1,29 @@
 package cn.hedeoer.util;
 
 import cn.hedeoer.firewalld.exception.FirewallException;
+import cn.hedeoer.firewalld.op.FirewallDRuleQuery;
 import cn.hedeoer.pojo.FireWallType;
+import org.freedesktop.dbus.connections.impl.DBusConnection;
+import org.freedesktop.dbus.exceptions.DBusException;
 import org.zeroturnaround.exec.ProcessExecutor;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class WallUtil {
+    private static final String FIREWALLD_PATH = "/org/fedoraproject/FirewallD1";
+    private static final String FIREWALLD_BUS_NAME = "org.fedoraproject.FirewallD1";
     /*
-    * 识别操作系统使用的防火墙工具
-    * 针对centos，debian系统
-    * 只对firewall，ufw处理
-    * */
+     * 识别操作系统使用的防火墙工具
+     * 针对centos，debian系统
+     * 只对firewall，ufw处理
+     * */
 
-    public static void getWallType(){
+    public static void getWallType() {
         if (OperateSystemUtil.isLinux()) {
             // 判断操作系统具体类型， centos， debian..
 
@@ -27,6 +35,7 @@ public class WallUtil {
 
     /**
      * 重新加载防火墙配置
+     *
      * @param fireWallType
      */
     public static void reloadFirewall(FireWallType fireWallType) throws FirewallException {
@@ -75,6 +84,52 @@ public class WallUtil {
                 return true;
             }
         }
+    }
+
+    public static List<String> getZoneNames() {
+        List<String> zoneNames = new ArrayList<>();
+        // 获取系统目前启用的防火墙工具
+        List<String> enabledFirewalls = FirewallDetector.getEnabledFirewalls();
+
+        // 如果没有启用任何防火墙工具，返回空列表
+        if (enabledFirewalls.isEmpty()) {
+            return zoneNames;
+        }
+
+        // 如果同时启用ufw和firewalld，默认使用firewalld
+        FireWallType willUseFireWallType;
+        if (enabledFirewalls.size() > 1) {
+            willUseFireWallType = FireWallType.FIREWALLD;
+        } else {
+            willUseFireWallType = FireWallType.valueOf(enabledFirewalls.get(0).toUpperCase());
+        }
+
+        // 如果启用的防火墙工具为firewalld
+        if (FireWallType.FIREWALLD.equals(willUseFireWallType)) {
+            try {
+                // 获取DBus连接
+                DBusConnection connection = FirewallDRuleQuery.getDBusConnection();
+
+                // 获取zone接口
+                FirewallDRuleQuery.FirewallDZoneInterface zoneInterface = connection.getRemoteObject(
+                        FIREWALLD_BUS_NAME,
+                        FIREWALLD_PATH,
+                        FirewallDRuleQuery.FirewallDZoneInterface.class);
+
+                // 获取所有zones
+                String[] zones = zoneInterface.getZones();
+                return zones != null ? Arrays.asList(zones) : new ArrayList<String>();
+            } catch (DBusException e) {
+                try {
+                    throw new FirewallException("Failed to get zone names: " + e.getMessage(), e);
+                } catch (FirewallException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+        }
+
+        return zoneNames;
+
     }
 
 }

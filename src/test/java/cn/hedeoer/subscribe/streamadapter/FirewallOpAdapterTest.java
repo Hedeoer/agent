@@ -1,12 +1,14 @@
 package cn.hedeoer.subscribe.streamadapter;
 
+import cn.hedeoer.firewalld.PortRule;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class FirewallOpAdapterTest {
 
@@ -28,5 +30,31 @@ public class FirewallOpAdapterTest {
         FirewallOpAdapter.PortRuleStreamEntry portRuleStreamEntry = adapter.fromMap(dataMap);
         System.out.println(portRuleStreamEntry);
 
+    }
+
+    @Test
+    public void testFromMap() {
+        Map<String, String> dataMap = new HashMap<>();
+        dataMap.put("agent_id", "test");
+        dataMap.put("agent_component_type", "firewall");
+        dataMap.put("data_op_type", "insert");
+        dataMap.put("request_params", "{\"isUsing\":false,\"policy\":true}");
+        dataMap.put("ts", "1477053217");
+
+        // 包含嵌套 source_rule 的数据
+        String data = "[{\"zone\":\"public\",\"permanent\":true,\"family\":\"ipv4\"," +
+                "\"port\":\"8088\",\"protocol\":\"tcp\",\"using\":false,\"policy\":true," +
+                "\"sourceRule\":{\"source\":\"172.16.10.11,172.16.0.0/24\"},\"descriptor\":\"\"}]";
+        dataMap.put("data", data);
+
+        FirewallOpAdapter.PortRuleStreamEntry entry = FirewallOpAdapter.fromMap(dataMap);
+
+        // 验证嵌套对象是否正确反序列化
+        assertNotNull(entry.getData());
+        assertEquals(1, entry.getData().size());
+
+        PortRule portRule = entry.getData().get(0);
+        assertNotNull(portRule.getSourceRule());
+        assertEquals("172.16.10.11,172.16.0.0/24", portRule.getSourceRule().getSource());
     }
 }

@@ -4,21 +4,16 @@ package cn.hedeoer.pojo;
  * 防火墙枚举，支持 ufw， firewalld
  */
 public enum FireWallType {
+    UFW("ufw"),
+    FIREWALLD("firewalld");
 
-    UFW("ufw")
-    , FIREWALLD("firewalld")
-    ;
-    private String fireWallType;
+    private final String firewallType;
 
-    FireWallType(String firewalld) {
-        this.fireWallType = firewalld;
+    FireWallType(String firewallType) {
+        this.firewallType = firewallType;
     }
 
-    public String getFireWallType() {
-        return fireWallType;
-    }
-
-    public void setFireWallType(String fireWallType) {
-        this.fireWallType = fireWallType;
+    public String getFirewallType() {
+        return firewallType;
     }
 }

@@ -279,7 +279,7 @@ public class FirewallDRuleQuery {
      * FirewallD区域接口
      */
     @DBusInterfaceName("org.fedoraproject.FirewallD1.zone")
-    interface FirewallDZoneInterface extends DBusInterface {
+    public interface FirewallDZoneInterface extends DBusInterface {
         String[] getZones();
         Map<String, Map<String, List<String>>> getActiveZones();
         String[] getServices(String zone);

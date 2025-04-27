@@ -249,6 +249,10 @@ public class PortRuleServiceImpl implements PortRuleService {
         if (!("insert".equals(operation) || "delete".equals(operation)) && portRule == null || WallUtil.isIllegal(portRule.getPort(), portRule.getProtocol())) {
             throw new FirewallException("Invalid port rule parameters");
         }
+        
+        // 增加判断是否具有对应防火墙zoneName的逻辑
+        // 如果为新增时没有则创建，如果为删除或者查询时没有则报错
+        boolean exist = ifExistZone(zoneName, operation);
 
         // 判断是添加还是移除操作
 //        String operation ;
@@ -336,6 +340,65 @@ public class PortRuleServiceImpl implements PortRuleService {
             throw new FirewallException("Failed to execute firewall command: " + e.getMessage(), e);
         } catch (FirewallException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * 判断zone是否存在
+     * 如果为新增时没有则创建，如果为删除或者查询时没有则报错
+     * @param zoneName 需要判断的zone名字
+     * @param operation 操作类型
+     * @return true表示zone存在或已创建，false表示zone不存在且无法创建
+     * @throws FirewallException 当zone不存在且为删除或查询操作时抛出异常
+     */
+    private boolean ifExistZone(String zoneName, String operation) throws FirewallException {
+        try {
+            // 获取DBus连接
+            DBusConnection connection = FirewallDRuleQuery.getDBusConnection();
+            
+            // 获取zone接口
+            FirewallDRuleQuery.FirewallDZoneInterface zoneInterface = connection.getRemoteObject(
+                    FIREWALLD_BUS_NAME,
+                    FIREWALLD_PATH,
+                    FirewallDRuleQuery.FirewallDZoneInterface.class);
+            
+            // 获取所有zones
+            List<String> zones = Arrays.asList(zoneInterface.getZones());
+            
+            // 检查zone是否存在
+            boolean exists = zones.contains(zoneName);
+            
+            if (!exists) {
+                // 如果是insert操作且zone不存在，尝试创建zone
+                if ("insert".equals(operation)) {
+                    String command = String.format("firewall-cmd --permanent --new-zone=%s", zoneName);
+                    ProcessResult result = new ProcessExecutor()
+                            .command("/bin/bash", "-c", command)
+                            .readOutput(true)
+                            .timeout(30, TimeUnit.SECONDS)
+                            .execute();
+                    
+                    if (result.getExitValue() == 0) {
+                        // 创建成功后需要重新加载
+                        String reloadCommand = "firewall-cmd --reload";
+                        result = new ProcessExecutor()
+                                .command("/bin/bash", "-c", reloadCommand)
+                                .readOutput(true)
+                                .timeout(30, TimeUnit.SECONDS)
+                                .execute();
+                        
+                        return result.getExitValue() == 0;
+                    }
+                    return false;
+                } else {
+                    // 如果是delete或query操作且zone不存在，抛出异常
+                    throw new FirewallException(String.format("Zone %s does not exist", zoneName));
+                }
+            }
+            
+            return true;
+        } catch (DBusException | IOException | InterruptedException | TimeoutException e) {
+            throw new FirewallException("Failed to check zone existence: " + e.getMessage(), e);
         }
     }
 
