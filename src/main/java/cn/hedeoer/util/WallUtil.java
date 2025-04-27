@@ -86,6 +86,17 @@ public class WallUtil {
         }
     }
 
+    /**
+     * 获取防火墙可用的区域(zone)名称列表
+     *
+     * 该方法会自动检测系统中启用的防火墙工具(firewalld/ufw)，并获取对应的zone列表：
+     * 1. 如果系统未启用任何防火墙工具，返回空列表
+     * 2. 如果同时启用了多个防火墙工具，优先使用firewalld
+     * 3. 对于firewalld，通过DBus接口获取所有可用的zones
+     * // todo 对应ufw的待实现
+     * @return 区域名称列表。如果是firewalld，返回所有可用的zones；其他情况返回空列表
+     * @throws RuntimeException 当与firewalld的DBus通信失败时抛出异常
+     */
     public static List<String> getZoneNames() {
         List<String> zoneNames = new ArrayList<>();
         // 获取系统目前启用的防火墙工具

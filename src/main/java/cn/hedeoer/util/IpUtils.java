@@ -44,6 +44,14 @@ public class IpUtils {
      * @return 返回"ipv4"、"ipv6"或"Unknown"
      */
     public static String getIpType(String ip) {
+        // 增加ip区间的判断
+        if (ip.contains("-")) {
+            ip = ip.split("-")[0];
+        }
+        if (ip.contains(",")) {
+            ip = ip.split(",")[0];
+        }
+
         if (isIpv4(ip)) {
             return "ipv4";
         } else if (isIpv6(ip)) {

@@ -66,7 +66,7 @@ public class FirewallOpAdapter implements Runnable {
                 StreamConsumer consumer = new StreamConsumer(jedis, pubStreamKey, groupName, consumerName);
 
                 //本次循环消费消息时最多阻塞1秒
-                List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 1000);
+                List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 0);
                 if (streamEntries.isEmpty()) {
 //                    logger.info("streamKey:{}, 目前无新消息",pubStreamKey);
                     continue;
@@ -75,6 +75,7 @@ public class FirewallOpAdapter implements Runnable {
 
                 // 转化 streamEntry的fields为java对象
                 PortRuleStreamEntry portRuleStreamEntry = fromMap(streamEntry.getFields());
+
                 // 判断此次端口规则操作的类型（PortRuleOpType枚举）
                 PortRuleOpType portRuleOpType = judgePortRuleOpType(portRuleStreamEntry);
 
@@ -92,7 +93,12 @@ public class FirewallOpAdapter implements Runnable {
                 Boolean consumeResultBoolean = null;
                 switch (portRuleOpType) {
                     case QUERY_ALL_PORTRULE:
-                        rules = portRuleService.queryAllPortRule(zoneName);
+                        // 获取系统防火墙由那些区域（zoneName）比如block,dmz,docker,drop,external,hedeoeraa,home,internal,private,public,trusted,work
+                        List<String> zoneNames = WallUtil.getZoneNames();
+                        // 默认查询 zoneName 为public的区域的端口规则,zoneName为master节点通过redis发送的，默认值为public
+                        if (zoneNames.contains(zoneName)) {
+                            rules = portRuleService.queryAllPortRule(zoneName);
+                        }
                         if (rules == null) {
                             consumeResult = ResponseResult.fail(rules, "无法获取区域："+zoneName+" 的全部端口规则！！");
                             break;
@@ -315,21 +321,21 @@ public class FirewallOpAdapter implements Runnable {
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder
     public static class PortRuleStreamEntry {
-        @JsonProperty("agent_id")
+        
         private String agentId;
-        @JsonProperty("agent_component_type")
+        
         private String agentComponentType;
-        @JsonProperty("data_op_type")
+        
         private String dataOpType;
-        @JsonProperty("request_params")
+        
         private Map<String, String> requestParams;
-        @JsonProperty("ts")
+        
         private String ts;
-        @JsonProperty("primary_key_columns")
+        
         private List<String> primaryKeyColumns;
-        @JsonProperty("data")
+        
         private List<PortRule> data;
-        @JsonProperty("old")
+        
         private PortRule old;
     }
 
@@ -353,6 +359,7 @@ public class FirewallOpAdapter implements Runnable {
             // 非空参数
             String agentId = map.get("agentId");
             String agentComponentType = map.get("agentComponentType");
+            // 操作类型
             String dataOpType = map.get("dataOpType");
             Map<String, String> requestParams = objectMapper.readValue(map.get("requestParams"), new TypeReference<Map<String, String>>() {
             });

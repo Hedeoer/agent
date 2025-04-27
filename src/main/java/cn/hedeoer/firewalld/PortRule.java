@@ -12,6 +12,7 @@ import java.util.Objects;
  */
 @Getter
 @Setter
+@ToString(callSuper = true)
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
@@ -26,7 +27,7 @@ public class PortRule extends AbstractFirewallRule {
     private String descriptor; //端口描述信息
 
     /**
-     * 对象比较只包含 port 和 protocol
+     * 对象比较只包含 port、protocol 和父类属性
      * @param o
      * @return
      */
@@ -43,21 +44,6 @@ public class PortRule extends AbstractFirewallRule {
         return Objects.hash(super.hashCode(), port, protocol);
     }
 
-    @Override
-    public String toString() {
-        return "PortRule{" +
-                "permanent=" + permanent +
-                ", type=" + type +
-                ", zone='" + zone + '\'' +
-                ", descriptor='" + descriptor + '\'' +
-                ", sourceRule=" + sourceRule +
-                ", policy=" + policy +
-                ", using=" + using +
-                ", protocol='" + protocol + '\'' +
-                ", port='" + port + '\'' +
-                ", family='" + family + '\'' +
-                '}';
-    }
 
     @Override
     public Map<String, Object> toDBusParams() {

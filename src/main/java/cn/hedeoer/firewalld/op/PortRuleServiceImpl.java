@@ -6,7 +6,7 @@ import cn.hedeoer.firewalld.SourceRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.util.DeepCopyUtil;
 import cn.hedeoer.util.IpUtils;
-import cn.hedeoer.util.PortUsageUtil;
+import cn.hedeoer.util.PortMonitorUtils;
 import cn.hedeoer.util.WallUtil;
 import org.freedesktop.dbus.annotations.DBusInterfaceName;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
@@ -198,12 +198,8 @@ public class PortRuleServiceImpl implements PortRuleService {
         // 更新firewalld的一条端口规则：1. 删除原来的 2. 添加新的
         Boolean deleteRes = null;
         Boolean insertRes = null;
-        try {
-            deleteRes = addOrRemovePortRule(zoneName, oldPortRule, "delete");
-            insertRes = addOrRemovePortRule(zoneName, newPortRule, "insert");
-        } catch (FirewallException e) {
-            throw new RuntimeException(e);
-        }
+        deleteRes = addOrRemoveOnePortRule(zoneName, oldPortRule, "delete");
+        insertRes = addOrRemoveOnePortRule(zoneName, newPortRule, "insert");
         return deleteRes && insertRes;
     }
 
@@ -264,8 +260,11 @@ public class PortRuleServiceImpl implements PortRuleService {
         // rich rule operation either add or remove
         operation = "insert".equals(operation) ? "add" : "remove";
 
+        // 该条端口策略是否持久化
+        Boolean permanent = portRule.isPermanent();
+
         // judge which simple operate or richRule operate ? if own sourceIps, it's richRule operate
-        if (portRule.getSourceRule() != null) {
+        if (portRule.getSourceRule() != null && !"0.0.0.0".equals(portRule.getSourceRule().getSource())) {
             String sourceIps = portRule.getSourceRule().getSource();
             // need check sourceIps formater
             List<IpUtils.IpInfo> sourceIpInfos = IpUtils.parseIpAddresses(sourceIps);
@@ -286,10 +285,12 @@ public class PortRuleServiceImpl implements PortRuleService {
                         policy);
 
                 // 添加或移除富规则
-                command = String.format("firewall-cmd --zone=%s --%s-rich-rule='%s' --permanent",
+                String permanentOpt = permanent ? " --permanent" : "";
+                command = String.format("firewall-cmd --zone=%s --%s-rich-rule='%s' %s",
                         zoneName,
                         operation,
-                        richRule);
+                        richRule,
+                        permanentOpt);
                 commandList.add(command);
             }
 
@@ -298,11 +299,13 @@ public class PortRuleServiceImpl implements PortRuleService {
             // 单个端口，如：8080  firewall-cmd --zone=public --add-port=8080/tcp  --permanent
             //范围端口，如：3000-4000 firewall-cmd --add-port=3000-4000/tcp --permanent
 
-            command = String.format("firewall-cmd --zone=%s --%s-port=%s/%s --permanent",
+            String permanentOpt = permanent ? " --permanent" : "";
+            command = String.format("firewall-cmd --zone=%s --%s-port=%s/%s %s",
                     zoneName,
                     operation,
                     portRule.getPort(),
-                    portRule.getProtocol().toLowerCase());
+                    portRule.getProtocol().toLowerCase(),
+                    permanentOpt);
             commandList.add(command);
         }
 
@@ -342,66 +345,6 @@ public class PortRuleServiceImpl implements PortRuleService {
             throw new RuntimeException(e);
         }
     }
-
-    /**
-     * 判断zone是否存在
-     * 如果为新增时没有则创建，如果为删除或者查询时没有则报错
-     * @param zoneName 需要判断的zone名字
-     * @param operation 操作类型
-     * @return true表示zone存在或已创建，false表示zone不存在且无法创建
-     * @throws FirewallException 当zone不存在且为删除或查询操作时抛出异常
-     */
-    private boolean ifExistZone(String zoneName, String operation) throws FirewallException {
-        try {
-            // 获取DBus连接
-            DBusConnection connection = FirewallDRuleQuery.getDBusConnection();
-            
-            // 获取zone接口
-            FirewallDRuleQuery.FirewallDZoneInterface zoneInterface = connection.getRemoteObject(
-                    FIREWALLD_BUS_NAME,
-                    FIREWALLD_PATH,
-                    FirewallDRuleQuery.FirewallDZoneInterface.class);
-            
-            // 获取所有zones
-            List<String> zones = Arrays.asList(zoneInterface.getZones());
-            
-            // 检查zone是否存在
-            boolean exists = zones.contains(zoneName);
-            
-            if (!exists) {
-                // 如果是insert操作且zone不存在，尝试创建zone
-                if ("insert".equals(operation)) {
-                    String command = String.format("firewall-cmd --permanent --new-zone=%s", zoneName);
-                    ProcessResult result = new ProcessExecutor()
-                            .command("/bin/bash", "-c", command)
-                            .readOutput(true)
-                            .timeout(30, TimeUnit.SECONDS)
-                            .execute();
-                    
-                    if (result.getExitValue() == 0) {
-                        // 创建成功后需要重新加载
-                        String reloadCommand = "firewall-cmd --reload";
-                        result = new ProcessExecutor()
-                                .command("/bin/bash", "-c", reloadCommand)
-                                .readOutput(true)
-                                .timeout(30, TimeUnit.SECONDS)
-                                .execute();
-                        
-                        return result.getExitValue() == 0;
-                    }
-                    return false;
-                } else {
-                    // 如果是delete或query操作且zone不存在，抛出异常
-                    throw new FirewallException(String.format("Zone %s does not exist", zoneName));
-                }
-            }
-            
-            return true;
-        } catch (DBusException | IOException | InterruptedException | TimeoutException e) {
-            throw new FirewallException("Failed to check zone existence: " + e.getMessage(), e);
-        }
-    }
-
     /**
      * 多端口，单协议
      *
@@ -491,7 +434,7 @@ public class PortRuleServiceImpl implements PortRuleService {
             boolean using = false;
             boolean policy = true;
             SourceRule sourceRule = SourceRule.builder()
-                    .source("All IPs allowed")
+                    .source("0.0.0.0")
                     .build();
             String des = "0.0.0.0";
             PortRule portRule = PortRule.builder()
@@ -515,7 +458,11 @@ public class PortRuleServiceImpl implements PortRuleService {
             SourceRule sourceRule = SourceRule.builder()
                     .source(parsedRule.getSource())
                     .build();
+
+            // 端口规则的描述
             String des = parsedRule.getDescription();
+
+
             PortRule portRule = PortRule.builder()
                     .port(portNumber)
                     .protocol(protocol)
@@ -536,22 +483,36 @@ public class PortRuleServiceImpl implements PortRuleService {
         logger.info("当前zone: {},从dbus端口查询中提取的端口规则有portRulesFromDbusPortQuery {} 条 :", zoneName, portRulesFromDbusPortQuery.size());
 
 
-        // 补充 端口规则中端口的使用状态 和  iptype， zone，type，permanent（默认为永久生效）
+        // 补充 端口规则中端口的使用状态 和  iptype， zone，type，permanent（默认为永久生效）,端口规则的描述
         for (PortRule rule : distinctPortRules) {
             String port = rule.getPort();
             // 4000-5000
             if (port.contains("-")) {
                 port = port.split("-")[0];
             }
-            String processCommandName = PortUsageUtil.getProcessCommandName(Integer.parseInt(port));
+
             // 检查端口是否被进程使用中
-            boolean enabled = processCommandName != null;
+            boolean enabled = false;
+
+            // 如果端口描述为默认值 0.0.0.0，则考虑使用端口监听的进程名字填充
+            String descriptor = "0.0.0.0";
+
+            List<PortMonitorUtils.PortInfo> portUsage = PortMonitorUtils.getPortUsage(Integer.parseInt(port));
+            if (portUsage.size() == 1) {
+                enabled = true;
+                String descFromOshi = portUsage.get(0).getProcessName();
+                if (!(descFromOshi == null || descFromOshi.isEmpty())) {
+                    descriptor = descFromOshi;
+                }
+            }
+
 //            boolean enabled = zoneInterface.queryPort(zoneName, rule.getPort(), rule.getProtocol());
             rule.setUsing(enabled);
-            String ipType = IpUtils.getIpType(rule.getPort());
+            String ipType = IpUtils.getIpType(port);
             rule.setFamily(ipType);
             rule.setZone(zoneName);
             rule.setType(RuleType.PORT);
+            rule.setDescriptor(descriptor);
             // todo 后续需要补充判断规则是否是永久生效的逻辑，目前默认永久生效
             rule.setPermanent(true);
         }

@@ -106,6 +106,17 @@
             <artifactId>oshi-core</artifactId>
             <version>6.8.0</version>
         </dependency>
+        <!-- JNA 依赖 (OSHI需要这些) -->
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <version>5.13.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna-platform</artifactId>
+            <version>5.13.0</version>
+        </dependency>
 
         <dependency>
             <groupId>ch.qos.logback</groupId>
