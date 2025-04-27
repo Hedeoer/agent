@@ -268,7 +268,7 @@ public class PortRuleServiceImpl implements PortRuleService {
         operation = "insert".equals(operation) ? "add" : "remove";
 
         // judge which simple operate or richRule operate ? if own sourceIps, it's richRule operate
-        if (portRule.getSourceRule() != null && !"All IPs allowed".equals(portRule.getSourceRule().getSource())) {
+        if (portRule.getSourceRule() != null && !"0.0.0.0".equals(portRule.getSourceRule().getSource())) {
             String sourceIps = portRule.getSourceRule().getSource();
             // need check sourceIps formater
             List<IpUtils.IpInfo> sourceIpInfos = IpUtils.parseIpAddresses(sourceIps);
@@ -435,9 +435,9 @@ public class PortRuleServiceImpl implements PortRuleService {
             boolean using = false;
             boolean policy = true;
             SourceRule sourceRule = SourceRule.builder()
-                    .source("All IPs allowed")
+                    .source("0.0.0.0")
                     .build();
-            String des = "All IPs allowed";
+            String des = "0.0.0.0";
             PortRule portRule = PortRule.builder()
                     .port(portNumber)
                     .protocol(protocol)
@@ -482,7 +482,12 @@ public class PortRuleServiceImpl implements PortRuleService {
 
         // 补充 端口规则中端口的使用状态 和  iptype， zone，type，permanent（默认为永久生效）
         for (PortRule rule : distinctPortRules) {
-            String processCommandName = PortUsageUtil.getProcessCommandName(Integer.parseInt(rule.getPort()));
+            String port = rule.getPort();
+            // 4000-5000
+            if (port.contains("-")) {
+                port = port.split("-")[0];
+            }
+            String processCommandName = PortUsageUtil.getProcessCommandName(Integer.parseInt(port));
             // 检查端口是否被进程使用中
             boolean enabled = processCommandName != null;
 //            boolean enabled = zoneInterface.queryPort(zoneName, rule.getPort(), rule.getProtocol());

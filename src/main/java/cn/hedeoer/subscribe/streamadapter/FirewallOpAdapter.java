@@ -94,7 +94,7 @@ public class FirewallOpAdapter implements Runnable {
                     case QUERY_ALL_PORTRULE:
                         rules = portRuleService.queryAllPortRule(zoneName);
                         if (rules == null) {
-                            consumeResult = ResponseResult.fail(rules, "无法获取全部端口规则！！");
+                            consumeResult = ResponseResult.fail(rules, "无法获取区域："+zoneName+" 的全部端口规则！！");
                             break;
                         }
                         break;
@@ -148,8 +148,9 @@ public class FirewallOpAdapter implements Runnable {
                 }
                 consumeResult.setData(rules);
 
-                // 加载防火墙使得配置生效
-                if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())) {
+                // 非查询操作需要加载防火墙使得配置生效
+                if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())
+                && !("query".equals(portRuleStreamEntry.getDataOpType()))) {
                     try {
                         WallUtil.reloadFirewall(FireWallType.FIREWALLD);
                         logger.info("重启防火墙 {} 成功", FireWallType.FIREWALLD);
