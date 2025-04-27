@@ -3,6 +3,7 @@ package cn.hedeoer.subscribe.streamadapter;
 import cn.hedeoer.agent.HeartBeat;
 import cn.hedeoer.common.ResponseResult;
 import cn.hedeoer.common.ResponseStatus;
+import cn.hedeoer.firewalld.AbstractFirewallRule;
 import cn.hedeoer.firewalld.PortRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.firewalld.op.PortRuleServiceImpl;
@@ -28,8 +29,10 @@ import redis.clients.jedis.StreamEntryID;
 import redis.clients.jedis.resps.StreamEntry;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 对redis stream的 数据做适配响应，比如 当添加或者删除一个防火墙规则时，需要调用方法
@@ -91,7 +94,7 @@ public class FirewallOpAdapter implements Runnable {
                     case QUERY_ALL_PORTRULE:
                         rules = portRuleService.queryAllPortRule(zoneName);
                         if (rules == null) {
-                            consumeResult = ResponseResult.fail(rules, "无法获取全部端口规则！！");
+                            consumeResult = ResponseResult.fail(rules, "无法获取区域："+zoneName+" 的全部端口规则！！");
                             break;
                         }
                         break;
@@ -112,7 +115,14 @@ public class FirewallOpAdapter implements Runnable {
                         }
                         break;
                     case ADDORREMOVE_BATCH_PORTRULES:
-                        consumeResultBoolean = portRuleService.addOrRemoveBatchPortRules(zoneName, datas, dataOpType.toLowerCase());
+                        // if list<PortRule> need group by getting the number of zoneName(distinct)
+                        // not
+                        // need group
+                        Map<String , List<PortRule>> batchPortRulesMap =  getDistinctZoneNamesFromPortRules(datas);
+                        for (Map.Entry<String, List<PortRule>> map : batchPortRulesMap.entrySet()) {
+                            consumeResultBoolean = portRuleService.addOrRemoveBatchPortRules(zoneName, map.getValue(), dataOpType.toLowerCase());
+                        }
+
                         if (!consumeResultBoolean) {
                             consumeResult = ResponseResult.fail(rules, "无法批量" + dataOpType + "端口规则");
                             break;
@@ -138,8 +148,9 @@ public class FirewallOpAdapter implements Runnable {
                 }
                 consumeResult.setData(rules);
 
-                // 加载防火墙使得配置生效
-                if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())) {
+                // 非查询操作需要加载防火墙使得配置生效
+                if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())
+                && !("query".equals(portRuleStreamEntry.getDataOpType()))) {
                     try {
                         WallUtil.reloadFirewall(FireWallType.FIREWALLD);
                         logger.info("重启防火墙 {} 成功", FireWallType.FIREWALLD);
@@ -166,6 +177,42 @@ public class FirewallOpAdapter implements Runnable {
         }
 
 
+    }
+
+    /**
+     * get portrules group by zonename
+     * @param datas total portrules
+     * @return map
+     */
+    private Map<String, List<PortRule>> getDistinctZoneNamesFromPortRules(List<PortRule> datas) {
+        HashMap<String, List<PortRule>> map = new HashMap<>();
+        ArrayList<PortRule> list = new ArrayList<>();
+
+        if (datas == null || datas.isEmpty()) {
+             map.put(null,list);
+             return map;
+        }
+
+        List<String> zoneNames = datas.stream()
+                .map(AbstractFirewallRule::getZone)
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (String zoneName : zoneNames) {
+            map.put(zoneName,new ArrayList<PortRule>());
+        }
+
+        for (PortRule data : datas) {
+            String zoneNameFromPortRule = data.getZone();
+            for (Map.Entry<String, List<PortRule>> subMap : map.entrySet()) {
+                if (map.containsKey(zoneNameFromPortRule)) {
+                    map.get(zoneNameFromPortRule)
+                            .add(data);
+                }
+            }
+        }
+
+        return map;
     }
 
     /**
@@ -304,17 +351,17 @@ public class FirewallOpAdapter implements Runnable {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
             // 非空参数
-            String agentId = map.get("agent_id");
-            String agentComponentType = map.get("agent_component_type");
-            String dataOpType = map.get("data_op_type");
-            Map<String, String> requestParams = objectMapper.readValue(map.get("request_params"), new TypeReference<Map<String, String>>() {
+            String agentId = map.get("agentId");
+            String agentComponentType = map.get("agentComponentType");
+            String dataOpType = map.get("dataOpType");
+            Map<String, String> requestParams = objectMapper.readValue(map.get("requestParams"), new TypeReference<Map<String, String>>() {
             });
             String ts = map.get("ts");
 
             // 可选参数
             List<String> primaryKeyColumns = new ArrayList<String>();
-            if (map.containsKey("primary_key_columns")) {
-                primaryKeyColumns = objectMapper.readValue(map.get("primary_key_columns"), new TypeReference<List<String>>() {
+            if (map.containsKey("primaryKeyColumns")) {
+                primaryKeyColumns = objectMapper.readValue(map.get("primaryKeyColumns"), new TypeReference<List<String>>() {
                 });
             }
 

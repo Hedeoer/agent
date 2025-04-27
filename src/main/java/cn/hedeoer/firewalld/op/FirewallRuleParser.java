@@ -95,7 +95,7 @@ public class FirewallRuleParser {
     // Find the source or log prefix that applies to a port by looking at positions
     private static String findApplicableValue(List<? extends PositionedValue> values, int portPosition) {
         if (values.isEmpty()) {
-            return "All IPs allowed"; // Default for source
+            return "0.0.0.0"; // Default for source
         }
         
         // Find the most recently defined value before the port
