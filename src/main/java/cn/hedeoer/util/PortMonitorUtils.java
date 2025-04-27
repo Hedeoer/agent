@@ -1,13 +1,14 @@
 package cn.hedeoer.util;
 
-import java.util.*;
-import java.util.stream.Collectors;
-
+import cn.hedeoer.pojo.PortInfo;
 import oshi.SystemInfo;
 import oshi.software.os.InternetProtocolStats;
+import oshi.software.os.InternetProtocolStats.IPConnection;
 import oshi.software.os.OSProcess;
 import oshi.software.os.OperatingSystem;
-import oshi.software.os.InternetProtocolStats.IPConnection;
+
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 端口监控工具类
@@ -16,105 +17,72 @@ import oshi.software.os.InternetProtocolStats.IPConnection;
 public class PortMonitorUtils {
 
     /**
-     * 端口信息实体类
-     */
-    public static class PortInfo {
-        private int portNumber;          // 端口号
-        private String processName;      // 进程名
-        private int processId;           // 进程ID
-        private String commandLine;      // 完整命令行
-        private String listenAddress;    // 监听地址
-
-        public PortInfo(int portNumber, String processName, int processId, String commandLine, String listenAddress) {
-            this.portNumber = portNumber;
-            this.processName = processName;
-            this.processId = processId;
-            this.commandLine = commandLine;
-            this.listenAddress = listenAddress;
-        }
-
-        // Getters
-        public int getPortNumber() { return portNumber; }
-        public String getProcessName() { return processName; }
-        public int getProcessId() { return processId; }
-        public String getCommandLine() { return commandLine; }
-        public String getListenAddress() { return listenAddress; }
-
-        // Helper method to determine information completeness
-        private int getInfoCompletenessScore() {
-            int score = 0;
-            if (processName != null && !processName.isEmpty()) score += 2;
-            if (commandLine != null && !commandLine.isEmpty()) score += 2;
-            if (listenAddress != null && !listenAddress.equals("unknown")) score += 1;
-            if (processId > 0) score += 1;
-            return score;
-        }
-
-        @Override
-        public String toString() {
-            return "PortInfo{" +
-                    "portNumber=" + portNumber +
-                    ", processName='" + processName + '\'' +
-                    ", processId=" + processId +
-                    ", commandLine='" + commandLine + '\'' +
-                    ", listenAddress='" + listenAddress + '\'' +
-                    '}';
-        }
-    }
-
-    /**
      * 获取指定端口范围内的所有端口使用情况。
      * <p>
      * 此方法通过 OSHI 库查询指定端口范围内的 TCP 和 UDP 连接，收集每个端口的占用情况，
-     * 包括端口号、关联进程的名称、进程 ID、命令行以及监听的 IP 地址。
-     * 对于每个端口，仅保留信息最完整的一条记录（基于 PortInfo 的信息完整度评分）。
+     * 包括协议、端口号、关联进程的名称、进程 ID、命令行以及监听的 IP 地址。
+     * 对于每个 (protocol, portNumber) 组合，仅保留信息最完整的一条记录（基于 PortInfo 的信息完整度评分）。
      * </p>
      *
      * @param startPort 起始端口号（包含）。必须为非负数且不大于 endPort。
      * @param endPort 结束端口号（包含）。必须为非负数且不超过 65535。
      * @return 返回一个 PortInfo 列表，包含范围内所有被占用的端口信息。
+     *         列表中每个 (protocol, portNumber) 组合是唯一的。
      *         如果没有端口被占用或范围无效，返回空列表。
      *         <p>PortInfo 对象各属性的可能取值如下：</p>
      *         <ul>
+     *           <li><b>protocol</b>: 字符串，"TCP" 或 "UDP"。</li>
      *           <li><b>portNumber</b>: 整数，范围 [startPort, endPort]，例如 80、6379。</li>
      *           <li><b>processName</b>: 字符串，进程名称（例如 "java"、"nginx"），可能为 ""（空字符串）或 null（取决于 oshi 实现）。</li>
      *           <li><b>processId</b>: 整数，通常为正数（例如 1234），表示进程 ID；可能为 0（无关联进程，但通常不会创建 PortInfo）。</li>
      *           <li><b>commandLine</b>: 字符串，进程的命令行（例如 "/usr/bin/java -jar app.jar"），可能为 "" 或 null（取决于 oshi 实现）。</li>
      *           <li><b>listenAddress</b>: 字符串，格式化的 IP 地址（例如 IPv4: "192.168.1.1"，IPv6: "2001:0db8:85a3:0000:0000:8a2e:0370:7334"），或 "unknown"（地址不可用），或十六进制字符串（未知格式，例如 "0a000001"）。</li>
      *         </ul>
-     * @throws IllegalArgumentException 如果 startPort 大于 endPort。
+     * @throws IllegalArgumentException 如果 startPort 大于 endPort 或端口范围无效。
      */
     public static List<PortInfo> getPortsUsage(int startPort, int endPort) {
-        if (startPort > endPort) {
-            throw new IllegalArgumentException("起始端口必须小于或等于结束端口");
+        if (startPort > endPort || startPort < 0 || endPort > 65535) {
+            throw new IllegalArgumentException("端口范围无效：起始端口必须小于或等于结束端口，且范围在 [0, 65535]");
         }
 
         SystemInfo systemInfo = new SystemInfo();
         OperatingSystem os = systemInfo.getOperatingSystem();
         InternetProtocolStats ipStats = os.getInternetProtocolStats();
 
-        // 获取所有TCP和UDP连接
-        List<IPConnection> allConnections = new ArrayList<>();
-        allConnections.addAll(ipStats.getConnections());
+        // Map to store the best PortInfo for each (protocol, port) combination
+        Map<String, PortInfo> portInfoMap = new HashMap<>();
 
-        // Map to store the best PortInfo for each port
-        Map<Integer, PortInfo> portInfoMap = new HashMap<>();
+        // Get all TCP and UDP connections
+        List<IPConnection> allConnections = ipStats.getConnections();
 
         for (IPConnection conn : allConnections) {
             int localPort = conn.getLocalPort();
 
             if (localPort >= startPort && localPort <= endPort) {
+                // Determine protocol (TCP or UDP)
+                String protocol = conn.getType().contains("tcp") ? "TCP" : "UDP";
+                // Create composite key for (protocol, portNumber)
+                String key = protocol + ":" + localPort;
+
                 int pid = conn.getowningProcessId();
                 String listenAddress = formatAddress(conn.getLocalAddress());
-                OSProcess process = os.getProcess(pid);
+                OSProcess process = pid > 0 ? os.getProcess(pid) : null;
 
                 if (process != null) {
                     String processName = process.getName();
                     String commandLine = process.getCommandLine();
-                    PortInfo newInfo = new PortInfo(localPort, processName, pid, commandLine, listenAddress);
+
+                    PortInfo newInfo = PortInfo.builder()
+                            .protocol(protocol)
+                            .portNumber(localPort)
+                            .processName(processName != null ? processName : "")
+                            .processId(pid)
+                            .commandLine(commandLine != null ? commandLine : "")
+                            .listenAddress(listenAddress)
+                            .build();
 
                     // Update if no existing info or new info is more complete
-                    portInfoMap.compute(localPort, (port, existingInfo) -> {
+                    portInfoMap.compute(key, (k, existingInfo) -> {
                         if (existingInfo == null) {
                             return newInfo;
                         }
@@ -134,15 +102,17 @@ public class PortMonitorUtils {
      * 此方法接收一个端口号字符串列表，查询这些端口的占用情况。
      * 它通过将字符串端口转换为整数、验证有效性，然后调用基于范围的 getPortsUsage 方法
      * 获取所有相关端口信息，最后过滤出指定端口的记录。
-     * 每个端口仅保留信息最完整的一条记录（基于 PortInfo 的信息完整度评分）。
+     * 每个 (protocol, portNumber) 组合仅保留信息最完整的一条记录（基于 PortInfo 的信息完整度评分）。
      * </p>
      *
      * @param ports 端口号字符串列表（例如 ["80", "443"]）。可以包含无效或重复的端口号，
      *              无效端口号（非数字、负数或大于 65535）将被忽略。
      * @return 返回一个 PortInfo 列表，包含指定端口中被占用的端口信息。
+     *         列表中每个 (protocol, portNumber) 组合是唯一的。
      *         如果输入为空、无效或没有端口被占用，返回空列表。
      *         <p>PortInfo 对象各属性的可能取值如下：</p>
      *         <ul>
+     *           <li><b>protocol</b>: 字符串，"TCP" 或 "UDP"。</li>
      *           <li><b>portNumber</b>: 整数，输入端口列表中的有效端口号（0-65535），例如 80、443、6379。</li>
      *           <li><b>processName</b>: 字符串，进程名称（例如 "java"、"nginx"），可能为 ""（空字符串）或 null（取决于 oshi 实现）。</li>
      *           <li><b>processId</b>: 整数，通常为正数（例如 1234），表示进程 ID；可能为 0（无关联进程，但通常不会创建 PortInfo）。</li>
@@ -170,7 +140,7 @@ public class PortMonitorUtils {
         int minPort = portSet.stream().min(Integer::compare).orElse(0);
         int maxPort = portSet.stream().max(Integer::compare).orElse(65535);
 
-        // Get all ports in range
+        // Get all ports in range (includes protocol information)
         List<PortInfo> allPorts = getPortsUsage(minPort, maxPort);
 
         // Filter to only requested ports

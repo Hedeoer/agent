@@ -4,6 +4,7 @@ import cn.hedeoer.firewalld.PortRule;
 import cn.hedeoer.firewalld.RuleType;
 import cn.hedeoer.firewalld.SourceRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
+import cn.hedeoer.pojo.PortInfo;
 import cn.hedeoer.util.DeepCopyUtil;
 import cn.hedeoer.util.IpUtils;
 import cn.hedeoer.util.PortMonitorUtils;
@@ -497,7 +498,7 @@ public class PortRuleServiceImpl implements PortRuleService {
             // 如果端口描述为默认值 0.0.0.0，则考虑使用端口监听的进程名字填充
             String descriptor = "0.0.0.0";
 
-            List<PortMonitorUtils.PortInfo> portUsage = PortMonitorUtils.getPortUsage(Integer.parseInt(port));
+            List<PortInfo> portUsage = PortMonitorUtils.getPortUsage(Integer.parseInt(port));
             if (portUsage.size() == 1) {
                 enabled = true;
                 String descFromOshi = portUsage.get(0).getProcessName();
