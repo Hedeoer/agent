@@ -40,8 +40,10 @@ public class PortMonitorUtils {
      *         </ul>
      * @throws IllegalArgumentException 如果 startPort 大于 endPort 或端口范围无效。
      */
-    public static List<PortInfo> getPortsUsage(int startPort, int endPort) {
-        if (startPort > endPort || startPort < 0 || endPort > 65535) {
+    public static List<PortInfo> getPortsUsage(String startPort, String endPort) {
+        int start = Integer.parseInt(startPort);
+        int end = Integer.parseInt(endPort);
+        if (start > end || start < 0 || end > 65535) {
             throw new IllegalArgumentException("端口范围无效：起始端口必须小于或等于结束端口，且范围在 [0, 65535]");
         }
 
@@ -58,9 +60,9 @@ public class PortMonitorUtils {
         for (IPConnection conn : allConnections) {
             int localPort = conn.getLocalPort();
 
-            if (localPort >= startPort && localPort <= endPort) {
+            if (localPort >= start && localPort <= end) {
                 // Determine protocol (TCP or UDP)
-                String protocol = conn.getType().contains("tcp") ? "TCP" : "UDP";
+                String protocol = conn.getType().contains("tcp") ? "tcp" : "udp";
                 // Create composite key for (protocol, portNumber)
                 String key = protocol + ":" + localPort;
 
@@ -86,7 +88,7 @@ public class PortMonitorUtils {
                         if (existingInfo == null) {
                             return newInfo;
                         }
-                        return newInfo.getInfoCompletenessScore() > existingInfo.getInfoCompletenessScore()
+                        return newInfo.gainInfoCompletenessScore() > existingInfo.gainInfoCompletenessScore()
                                 ? newInfo : existingInfo;
                     });
                 }
@@ -140,8 +142,9 @@ public class PortMonitorUtils {
         int minPort = portSet.stream().min(Integer::compare).orElse(0);
         int maxPort = portSet.stream().max(Integer::compare).orElse(65535);
 
+
         // Get all ports in range (includes protocol information)
-        List<PortInfo> allPorts = getPortsUsage(minPort, maxPort);
+        List<PortInfo> allPorts = getPortsUsage(minPort + "", maxPort + "");
 
         // Filter to only requested ports
         return allPorts.stream()
@@ -194,7 +197,7 @@ public class PortMonitorUtils {
      * @param port 端口号
      * @return 端口信息列表
      */
-    public static List<PortInfo> getPortUsage(int port) {
+    public static List<PortInfo> getPortUsage(String port) {
         return getPortsUsage(port, port);
     }
 
@@ -204,7 +207,7 @@ public class PortMonitorUtils {
      * @param port 端口号
      * @return 是否被占用
      */
-    public static boolean isPortInUse(int port) {
+    public static boolean isPortInUse(String port) {
         return !getPortUsage(port).isEmpty();
     }
 

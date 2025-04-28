@@ -15,12 +15,12 @@ public class PortMonitorUtilsTest {
     public void getPortsUsageTest() {
         // 示例1: 获取80端口的使用情况
         System.out.println("端口 6532 的使用情况:");
-        List<PortInfo> port80Info = PortMonitorUtils.getPortUsage(6532);
+        List<PortInfo> port80Info = PortMonitorUtils.getPortUsage("6532");
         for (PortInfo info : port80Info) {
             System.out.println(info);
         }
 
-        System.out.println("端口6532是否被占用: " + isPortInUse(6532));
+        System.out.println("端口6532是否被占用: " + isPortInUse("6532"));
 
         // 示例2: 获取指定端口列表的使用情况
         System.out.println("\n指定端口列表的使用情况:");

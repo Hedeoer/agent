@@ -498,7 +498,7 @@ public class PortRuleServiceImpl implements PortRuleService {
             // 如果端口描述为默认值 0.0.0.0，则考虑使用端口监听的进程名字填充
             String descriptor = "0.0.0.0";
 
-            List<PortInfo> portUsage = PortMonitorUtils.getPortUsage(Integer.parseInt(port));
+            List<PortInfo> portUsage = PortMonitorUtils.getPortUsage(port);
             if (portUsage.size() == 1) {
                 enabled = true;
                 String descFromOshi = portUsage.get(0).getProcessName();

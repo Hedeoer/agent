@@ -1,16 +1,18 @@
 package cn.hedeoer.pojo;
 
+import cn.hedeoer.util.AgentIdUtil;
 import lombok.*;
 
 /**
  * 端口信息实体类
  */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter
+@Setter
+@EqualsAndHashCode
 @Builder
 @ToString
 public class PortInfo {
+    private String agentId;          // agent节点的唯一标识
     private String protocol;         // 协议
     private Integer portNumber;          // 端口号
     private String processName;      // 进程名
@@ -18,8 +20,26 @@ public class PortInfo {
     private String commandLine;      // 完整命令行
     private String listenAddress;    // 监听地址
 
+
+    // 每个PortInfo对象的agentId是唯一的
+    public PortInfo(String agentId,String protocol, Integer portNumber, String processName, Integer processId, String commandLine, String listenAddress) {
+        this.agentId = AgentIdUtil.loadOrCreateUUID();
+        this.protocol = protocol;
+        this.portNumber = portNumber;
+        this.processName = processName;
+        this.processId = processId;
+        this.commandLine = commandLine;
+        this.listenAddress = listenAddress;
+    }
+
+    public PortInfo() {
+        this.agentId = AgentIdUtil.loadOrCreateUUID();
+    }
+
+
+
     // Helper method to determine information completeness
-    public Integer getInfoCompletenessScore() {
+    public Integer gainInfoCompletenessScore() {
         int score = 0;
         if(protocol != null && !protocol.isEmpty()) score += 3;
         if (processName != null && !processName.isEmpty()) score += 2;
