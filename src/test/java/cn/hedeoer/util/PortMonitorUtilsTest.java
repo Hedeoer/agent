@@ -30,4 +30,13 @@ public class PortMonitorUtilsTest {
             System.out.println(info);
         }
     }
+
+    @Test
+    public void isPortsInUse() {
+        System.out.println(PortMonitorUtils.getPortsInUse("9080,9081","tcp"));
+        System.out.println(PortMonitorUtils.getPortsInUse("8083-8084","tcp"));
+        System.out.println(PortMonitorUtils.getPortsInUse("6532","tcp"));
+        System.out.println(PortMonitorUtils.getPortsInUse("6533","tcp"));
+        System.out.println(PortMonitorUtils.getPortsInUse("","tcp"));
+    }
 }

@@ -5,6 +5,8 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
+import java.util.List;
+
 /**
  * Redis客户端工具类，基于Jedis实现
  */
@@ -113,6 +115,18 @@ public class RedisUtil {
      */
     public interface RedisCallback<T> {
         T doInRedis(Jedis jedis);
+    }
+
+    /**
+     * 获取redis 服务器本地时间
+     * @return 秒级时间戳字符串
+     */
+    public static String getRedisServerTime(){
+        try(Jedis jedis = RedisUtil.getJedis()){
+            // 执行 TIME 命令
+            List<String> timeResult = jedis.time();
+            return timeResult.get(0);      // 秒级时间戳（字符串格式，需转换）
+        }
     }
 
 }

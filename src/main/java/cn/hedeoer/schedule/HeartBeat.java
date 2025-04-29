@@ -1,6 +1,5 @@
-package cn.hedeoer.agent;
+package cn.hedeoer.schedule;
 
-import ch.qos.logback.core.util.TimeUtil;
 import cn.hedeoer.pojo.OSType;
 import cn.hedeoer.util.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -55,9 +54,10 @@ public class HeartBeat implements Runnable{
             long hset = jedis.hset(heartBeatHashTableName, agentId, agentNodeInfoSerializeStr);
             if (hset == 0 || hset == 1) {
                 res = true;
+            }else{
+                logger.error("agentId：{} 向 master节点发送心跳失败，当前配置心跳时间间隔 : {} 秒",agentId, this.heartBeatGap);
             }
 
-            logger.info("agentId：{} 向 master节点发送心跳，当前配置心跳时间间隔 : {} 秒",agentId, this.heartBeatGap);
             return res;
         }
     }
@@ -72,8 +72,7 @@ public class HeartBeat implements Runnable{
 
 
         // 执行 TIME 命令
-        List<String> timeResult = jedis.time();
-        String seconds = timeResult.get(0);      // 秒级时间戳（字符串格式，需转换）
+        String seconds = RedisUtil.getRedisServerTime();      // 秒级时间戳（字符串格式，需转换）
 
         // 是否首次上报
         boolean isFirstHeartBeat = jedis.hget(heartBeatHashTableName, agentId) == null;

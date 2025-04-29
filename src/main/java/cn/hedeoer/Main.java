@@ -1,6 +1,7 @@
 package cn.hedeoer;
 
-import cn.hedeoer.agent.HeartBeat;
+import cn.hedeoer.schedule.HeartBeat;
+import cn.hedeoer.schedule.PortInfoReport;
 import cn.hedeoer.subscribe.streamadapter.FirewallOpAdapter;
 import cn.hedeoer.subscribe.streamadapter.PortInfoAdapter;
 import cn.hedeoer.util.ThreadPoolUtil;
@@ -39,7 +40,7 @@ public class Main {
 
         // 1. 创建独立的定时任务线程池处理心跳
         ScheduledThreadPoolExecutor scheduledPool =
-                ThreadPoolUtil.createScheduledThreadPool(1, "heartbeat-pool");
+                ThreadPoolUtil.createScheduledThreadPool(2, "schedule-pool");
 
         // 2. 使用独立的线程池处理消费任务
         ThreadPoolExecutor consumerPool =
@@ -54,7 +55,10 @@ public class Main {
         consumerPool.execute(portInfoAdapter);
 
         HeartBeat heartBeat = new HeartBeat(30);  // 30秒间隔
+        PortInfoReport portInfoReport = new PortInfoReport(40); //  40秒间隔
+
         scheduledPool.scheduleAtFixedRate(heartBeat, 0, 30, TimeUnit.SECONDS);
+        scheduledPool.scheduleAtFixedRate(portInfoReport, 0, 40, TimeUnit.SECONDS);
 
     }
 }

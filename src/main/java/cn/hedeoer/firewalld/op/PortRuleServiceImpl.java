@@ -486,29 +486,33 @@ public class PortRuleServiceImpl implements PortRuleService {
 
         // 补充 端口规则中端口的使用状态 和  iptype， zone，type，permanent（默认为永久生效）,端口规则的描述
         for (PortRule rule : distinctPortRules) {
-            String port = rule.getPort();
-            // 4000-5000
-            if (port.contains("-")) {
-                port = port.split("-")[0];
-            }
 
-            // 检查端口是否被进程使用中
-            boolean enabled = false;
+            // 该条端口规则的端口，
+            // 可能为单个端口，
+            // 可能为-分隔区间端口，比如3434-4562；
+            // 可能为,分隔区间端口2323，643534，22
+            // 正常情况只有三种情况
+            String port = rule.getPort();
 
             // 如果端口描述为默认值 0.0.0.0，则考虑使用端口监听的进程名字填充
             String descriptor = "0.0.0.0";
 
-            List<PortInfo> portUsage = PortMonitorUtils.getPortUsage(port);
-            if (portUsage.size() == 1) {
-                enabled = true;
-                String descFromOshi = portUsage.get(0).getProcessName();
-                if (!(descFromOshi == null || descFromOshi.isEmpty())) {
-                    descriptor = descFromOshi;
+            // 端口规则中的状态列含义：
+            // 当端口规则中端口为单个端口，比如 (tcp 4567)，using属性为true，表示该机器tcp下该端口正在被使用；为false，表示机器tcp的4567端口未被使用
+            // 当端口规则为端口为多个端口，比如 tcp（3456-6543) 或者  udp[23423,553,774]）。using属性为true,表示机器tcp 的 3456-6543范围内有端口被使用了；为false,表示机器tcp 的 3456-6543范围内所有端口都未被占用
+            // 具体端口使用详细信息查看PortInfoAdapter类实现
+            List<PortInfo> portsInUse = PortMonitorUtils.getPortsInUse(port,rule.getProtocol());
+            boolean inUse = !portsInUse.isEmpty();
+
+            if (inUse) {
+                StringBuilder stringBuilder = new StringBuilder();
+                for (PortInfo portInfo : portsInUse) {
+                    stringBuilder.append(portInfo.getProcessName()).append(",");
                 }
+                descriptor = stringBuilder.toString();
             }
 
-//            boolean enabled = zoneInterface.queryPort(zoneName, rule.getPort(), rule.getProtocol());
-            rule.setUsing(enabled);
+            rule.setUsing(inUse);
             String ipType = IpUtils.getIpType(port);
             rule.setFamily(ipType);
             rule.setZone(zoneName);

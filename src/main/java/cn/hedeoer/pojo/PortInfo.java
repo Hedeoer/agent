@@ -3,6 +3,8 @@ package cn.hedeoer.pojo;
 import cn.hedeoer.util.AgentIdUtil;
 import lombok.*;
 
+import java.util.Objects;
+
 /**
  * 端口信息实体类
  */
