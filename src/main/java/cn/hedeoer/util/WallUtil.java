@@ -3,9 +3,11 @@ package cn.hedeoer.util;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.firewalld.op.FirewallDRuleQuery;
 import cn.hedeoer.pojo.FireWallType;
+import cn.hedeoer.pojo.FirewallStatusInfo;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.zeroturnaround.exec.ProcessExecutor;
+import org.zeroturnaround.exec.ProcessResult;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -141,6 +143,148 @@ public class WallUtil {
 
         return zoneNames;
 
+    }
+
+
+    // 检查命令是否存在
+    private static boolean isCommandExist(String command) {
+        try {
+            String result = execGetLine("command", "-v", command);
+            return result != null && !result.trim().isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // 获取防火墙类型
+    public static FireWallType  getFirewallType() {
+        if (isCommandExist("firewalld")) {
+            return FireWallType .FIREWALLD;
+        }
+        if (isCommandExist("ufw")) {
+            return FireWallType.UFW;
+        }
+        return FireWallType.NONE;
+    }
+
+    // 获取防火墙状态
+    public static String getFirewallStatus(FireWallType type) {
+        try {
+            if (type == FireWallType.FIREWALLD) {
+                return execGetLine("systemctl", "is-active", "firewalld");
+            }
+            if (type == FireWallType.UFW) {
+                // ufw status | grep -i status | awk '{print $2;}'
+                String out = exec("ufw", "status");
+                if (out == null) return "unknown";
+                for (String line : out.split("\n")) {
+                    if (line.toLowerCase().contains("status:")) {
+                        return line.split(":", 2)[1].trim();
+                    }
+                }
+                return "unknown";
+            }
+        } catch (Exception e) {
+            return "unknown";
+        }
+        return "not installed";
+    }
+
+    // 获取防火墙版本
+    public static String getFirewallVersion(FireWallType type) {
+        try {
+            if (type == FireWallType.FIREWALLD) {
+                return execGetLine("firewall-cmd", "--version");
+            }
+            if (type == FireWallType.UFW) {
+                // ufw version | grep -i ufw | awk '{print $2;}'
+                String out = exec("ufw", "version");
+                if (out != null) {
+                    for (String line : out.split("\n")) {
+                        if (line.toLowerCase().contains("ufw")) {
+                            String[] arr = line.trim().split("\\s+");
+                            if (arr.length >= 2) {
+                                return arr[1];
+                            }
+                        }
+                    }
+                }
+                return "unknown";
+            }
+        } catch (Exception e) {
+            return "unknown";
+        }
+        return "not installed";
+    }
+
+    // 是否禁Ping
+    public static boolean isPingDisabled(FireWallType type) {
+        try {
+            if (type == FireWallType.FIREWALLD) {
+                // 主动查 zone
+                String zone = execGetLine("firewall-cmd", "--get-default-zone");
+                if (zone == null) zone = "public";
+                String block = execGetLine("firewall-cmd", "--zone=" + zone, "--query-icmp-block=echo-request");
+                return "yes".equalsIgnoreCase(block != null ? block.trim() : null);
+            } else if (type == FireWallType.UFW) {
+                // 查是否有deny icmp/deny到icmp echo的规则
+                String status = exec("ufw", "status", "verbose");
+                // 典型 deny的行： "Anywhere DENY IN icmp"
+                return status != null && status.toLowerCase().contains("deny") && status.toLowerCase().contains("icmp");
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return false;
+    }
+
+    // zt-exec 执行并返回首行
+    private static String execGetLine(String... cmd) throws Exception {
+        // 建议统一指定环境变量，防止乱码
+        ProcessResult result = new ProcessExecutor()
+                .command(cmd)
+                .readOutput(true)
+                .exitValues(0)
+                .environment("LANG", "en_US.UTF-8") // 增加这行
+                .timeout(5000, TimeUnit.SECONDS)
+                .execute();
+        String out = result.outputString().trim();
+        return out.isEmpty() ? null : out.split("\n")[0].trim();
+    }
+
+    // 执行并返回完整输出
+    private static String exec(String... cmd) throws Exception {
+        ProcessResult result = new ProcessExecutor()
+                .command(cmd)
+                .readOutput(true)
+                .exitValues(0)
+                .environment("LANG", "en_US.UTF-8") // 增加这行
+                .timeout(5000, TimeUnit.SECONDS)
+                .execute();
+        return result.outputString().trim();
+    }
+
+    public static FirewallStatusInfo getFirewallStatusInfo(){
+        FireWallType type = getFirewallType();
+        String agentId = AgentIdUtil.loadOrCreateUUID();
+        return FirewallStatusInfo.builder()
+                .agentId(agentId)
+                .firewallType(type.toString())
+                .version(getFirewallVersion(type))
+                .status(getFirewallStatus(type))
+                .pingDisabled(isPingDisabled(type))
+                .timestamp(System.currentTimeMillis() / 1000)
+                .build();
+    }
+
+    public static void main(String[] args) {
+        FireWallType type = getFirewallType();
+        System.out.println("防火墙类型: " + type);
+        System.out.println("运行状态: " + getFirewallStatus(type));
+        System.out.println("版本: " + getFirewallVersion(type));
+        System.out.println("是否禁ping: " + isPingDisabled(type));
+
+        System.out.println(getFirewallStatusInfo());
     }
 
 }

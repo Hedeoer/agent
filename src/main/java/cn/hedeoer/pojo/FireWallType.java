@@ -5,7 +5,8 @@ package cn.hedeoer.pojo;
  */
 public enum FireWallType {
     UFW("ufw"),
-    FIREWALLD("firewalld");
+    FIREWALLD("firewalld"),
+    NONE("none");
 
     private final String firewallType;
 
