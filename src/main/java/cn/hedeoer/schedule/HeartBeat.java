@@ -1,6 +1,6 @@
 package cn.hedeoer.schedule;
 
-import cn.hedeoer.pojo.OSType;
+import cn.hedeoer.common.OSType;
 import cn.hedeoer.util.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,8 +11,6 @@ import lombok.NoArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
-
-import java.util.List;
 
 /**
  * agent节点的心跳检测

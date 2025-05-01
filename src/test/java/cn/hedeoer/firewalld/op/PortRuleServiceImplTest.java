@@ -3,7 +3,7 @@ package cn.hedeoer.firewalld.op;
 import cn.hedeoer.firewalld.PortRule;
 import cn.hedeoer.firewalld.SourceRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
-import cn.hedeoer.pojo.FireWallType;
+import cn.hedeoer.common.FireWallType;
 import cn.hedeoer.util.DeepCopyUtil;
 import cn.hedeoer.util.WallUtil;
 import org.junit.Test;

@@ -1,5 +1,8 @@
 package cn.hedeoer.pojo;
 
+import cn.hedeoer.common.FireWallStatus;
+import cn.hedeoer.common.FireWallType;
+import cn.hedeoer.common.PingStatus;
 import lombok.Builder;
 import lombok.Data;
 import lombok.ToString;
@@ -12,16 +15,16 @@ public class FirewallStatusInfo {
     private String agentId;
 
     /** 防火墙类型（FIREWALLD、UFW、NONE） */
-    private String firewallType;
+    private FireWallType firewallType;
 
     /** 防火墙运行状态（running/active/disabled/not installed/unknown） */
-    private String status;
+    private FireWallStatus status;
 
     /** 防火墙版本号 */
     private String version;
 
     /** 是否禁ping */
-    private Boolean pingDisabled;
+    private PingStatus pingDisabled;
 
     /** 获取时间戳 */
     private Long timestamp;

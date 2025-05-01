@@ -1,14 +1,20 @@
 package cn.hedeoer.util;
 
+import cn.hedeoer.common.FireWallStatus;
+import cn.hedeoer.common.FirewallOperationType;
+import cn.hedeoer.common.PingStatus;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.firewalld.op.FirewallDRuleQuery;
-import cn.hedeoer.pojo.FireWallType;
+import cn.hedeoer.common.FireWallType;
 import cn.hedeoer.pojo.FirewallStatusInfo;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class WallUtil {
+    private static final Logger logger = LoggerFactory.getLogger(WallUtil.class);
     private static final String FIREWALLD_PATH = "/org/fedoraproject/FirewallD1";
     private static final String FIREWALLD_BUS_NAME = "org.fedoraproject.FirewallD1";
     /*
@@ -168,26 +175,43 @@ public class WallUtil {
     }
 
     // 获取防火墙状态
-    public static String getFirewallStatus(FireWallType type) {
+    /**
+     * 获取指定类型防火墙的当前状态
+     *
+     * <p>此方法通过执行系统命令检查防火墙的运行状态。对于 firewalld，使用 systemctl 命令；
+     * 对于 ufw，解析 ufw status 命令的输出。</p>
+     *
+     * <p>可能的返回值:</p>
+     * <ul>
+     *   <li>对于 firewalld: "active", "inactive", "unknown", "not installed"</li>
+     *   <li>对于 ufw: "active", "inactive", "enabled", "disabled", "unknown", "not installed"</li>
+     * </ul>
+     *
+     * @param type 要检查的防火墙类型
+     * @return 防火墙的状态字符串
+     */
+    public static FireWallStatus getFirewallStatus(FireWallType type) {
+        String statusText = "unknown";
         try {
             if (type == FireWallType.FIREWALLD) {
-                return execGetLine("systemctl", "is-active", "firewalld");
-            }
-            if (type == FireWallType.UFW) {
+                statusText =  execGetLine("systemctl", "is-active", "firewalld");
+            }else if (type == FireWallType.UFW) {
                 // ufw status | grep -i status | awk '{print $2;}'
                 String out = exec("ufw", "status");
-                if (out == null) return "unknown";
+                if (out == null) statusText = "unknown";
                 for (String line : out.split("\n")) {
                     if (line.toLowerCase().contains("status:")) {
-                        return line.split(":", 2)[1].trim();
+                        statusText =  line.split(":", 2)[1].trim();
                     }
                 }
-                return "unknown";
+                statusText = "unknown";
+            }else{
+                statusText =  "not installed";
             }
         } catch (Exception e) {
-            return "unknown";
+            statusText = "unknown";
         }
-        return "not installed";
+        return FireWallStatus.fromString(statusText);
     }
 
     // 获取防火墙版本
@@ -217,26 +241,7 @@ public class WallUtil {
         return "not installed";
     }
 
-    // 是否禁Ping
-    public static boolean isPingDisabled(FireWallType type) {
-        try {
-            if (type == FireWallType.FIREWALLD) {
-                // 主动查 zone
-                String zone = execGetLine("firewall-cmd", "--get-default-zone");
-                if (zone == null) zone = "public";
-                String block = execGetLine("firewall-cmd", "--zone=" + zone, "--query-icmp-block=echo-request");
-                return "yes".equalsIgnoreCase(block != null ? block.trim() : null);
-            } else if (type == FireWallType.UFW) {
-                // 查是否有deny icmp/deny到icmp echo的规则
-                String status = exec("ufw", "status", "verbose");
-                // 典型 deny的行： "Anywhere DENY IN icmp"
-                return status != null && status.toLowerCase().contains("deny") && status.toLowerCase().contains("icmp");
-            }
-        } catch (Exception e) {
-            return false;
-        }
-        return false;
-    }
+
 
     // zt-exec 执行并返回首行
     private static String execGetLine(String... cmd) throws Exception {
@@ -269,22 +274,163 @@ public class WallUtil {
         String agentId = AgentIdUtil.loadOrCreateUUID();
         return FirewallStatusInfo.builder()
                 .agentId(agentId)
-                .firewallType(type.toString())
+                .firewallType(type)
                 .version(getFirewallVersion(type))
                 .status(getFirewallStatus(type))
-                .pingDisabled(isPingDisabled(type))
+                .pingDisabled(PingControlUtil.getCurrentPingStatus())
                 .timestamp(System.currentTimeMillis() / 1000)
                 .build();
     }
 
-    public static void main(String[] args) {
-        FireWallType type = getFirewallType();
-        System.out.println("防火墙类型: " + type);
-        System.out.println("运行状态: " + getFirewallStatus(type));
-        System.out.println("版本: " + getFirewallVersion(type));
-        System.out.println("是否禁ping: " + isPingDisabled(type));
 
-        System.out.println(getFirewallStatusInfo());
+
+    /**
+     * 对系统防火墙进行简要操作，启动，停止，重启
+     * @param fireWallStatusOpType  fireWallStatusOpType
+     * @return 操作成功返回true，否则返回false
+     */
+    public static Boolean operateFireWall(FirewallOperationType fireWallStatusOpType) {
+        FireWallType firewallType = getFirewallType();
+        String command = null;
+
+        try {
+            if (FireWallType.FIREWALLD.equals(firewallType)) {
+                // 处理 firewalld 防火墙
+                switch (fireWallStatusOpType) {
+                    case START:
+                        command = "sudo systemctl start firewalld";
+                        break;
+                    case STOP:
+                        command = "sudo systemctl stop firewalld";
+                        break;
+                    case RESTART:
+                        command = "sudo systemctl restart firewalld";
+                        break;
+                    default:
+                        return false;
+                }
+
+                int exitValue = new ProcessExecutor()
+                        .command("bash", "-c", command)
+                        .exitValueNormal()
+                        .execute()
+                        .getExitValue();
+
+                if (exitValue != 0) {
+                    logger.error("Failed to execute command: {}, exit value: {}", command, exitValue);
+                    return false;
+                }
+
+            } else if (FireWallType.UFW.equals(firewallType)) {
+                // 处理 UFW 防火墙
+                switch (fireWallStatusOpType) {
+                    case START:
+                        command = "sudo ufw enable";
+                        // UFW 可能会要求交互确认，添加 --force 参数避免交互
+                        command = "echo y | " + command + " --force";
+                        break;
+                    case STOP:
+                        command = "sudo ufw disable";
+                        break;
+                    case RESTART:
+                        command = "sudo ufw disable && sudo ufw enable";
+                        // UFW 可能会要求交互确认，添加 --force 参数避免交互
+                        command = "echo y | " + command + " --force";
+                        break;
+                    default:
+                        return false;
+                }
+
+                int exitValue = new ProcessExecutor()
+                        .command("bash", "-c", command)
+                        .exitValueNormal()
+                        .execute()
+                        .getExitValue();
+
+                if (exitValue != 0) {
+                    logger.error("Failed to execute command: {}, exit value: {}", command, exitValue);
+                    return false;
+                }
+
+            } else {
+                // 不支持的防火墙类型
+                logger.error("Unsupported firewall type: {}", firewallType);
+                return false;
+            }
+
+            // 添加延时检测机制
+            return waitForFirewallStatus(firewallType, fireWallStatusOpType, 5, 1000);
+
+        } catch (Exception e) {
+            logger.error("Failed to operate firewall: {}", e.getMessage(), e);
+            return false;
+        }
     }
 
+    /**
+     * 等待防火墙状态变更并检测结果
+     *
+     * @param firewallType 防火墙类型
+     * @param opType 操作类型
+     * @param maxAttempts 最大尝试次数
+     * @param delayMs 每次尝试之间的延迟(毫秒)
+     * @return 如果防火墙状态符合预期则返回true，否则返回false
+     */
+    private static boolean waitForFirewallStatus(FireWallType firewallType, FirewallOperationType opType,
+                                                 int maxAttempts, long delayMs) {
+        logger.info("Waiting for firewall {} operation to complete...", opType.name());
+
+        // 确定期望的状态
+        boolean expectedRunning = opType != FirewallOperationType.STOP;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                // 延迟检测
+                Thread.sleep(delayMs);
+
+                // 检查当前状态
+                boolean isRunning = FireWallStatus.ACTIVE.equals(getFirewallStatus(firewallType));
+                logger.debug("Firewall status check attempt {}/{}: expected={}, actual={}",
+                        attempt, maxAttempts, expectedRunning, isRunning);
+
+                if (isRunning == expectedRunning) {
+                    logger.info("Firewall {} operation completed successfully", opType.name());
+                    return true;
+                }
+
+                // 如果是最后一次尝试，记录警告
+                if (attempt == maxAttempts) {
+                    logger.warn("Firewall status did not change to expected state after {} attempts", maxAttempts);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.warn("Interrupted while waiting for firewall status change", e);
+                return false;
+            } catch (Exception e) {
+                logger.error("Error checking firewall status: {}", e.getMessage(), e);
+                // 继续尝试下一次检测
+            }
+        }
+
+        return false;
+    }
+
+
+    public static void main(String[] args) {
+//        FireWallType type = getFirewallType();
+//        System.out.println("防火墙类型: " + type);
+//        System.out.println("运行状态: " + getFirewallStatus(type));
+//        System.out.println("版本: " + getFirewallVersion(type));
+//        System.out.println("是否禁ping: " + pingStatus());
+//
+//        System.out.println(getFirewallStatusInfo());
+//
+//        System.out.println(operateFireWall(FirewallOperationType.START));
+//
+//        System.out.println(PingControlUtil.pingStatus());
+//        System.out.println(PingControlUtil.getCurrentPingStatus());
+
+        System.out.println(PingControlUtil.hasAdminPrivileges());
+        System.out.println(PingControlUtil.enablePing());
+    }
 }

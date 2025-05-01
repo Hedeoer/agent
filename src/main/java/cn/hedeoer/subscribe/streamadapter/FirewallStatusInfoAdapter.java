@@ -1,19 +1,18 @@
 package cn.hedeoer.subscribe.streamadapter;
 
 
+import cn.hedeoer.common.FirewallOperationType;
 import cn.hedeoer.common.ResponseResult;
 import cn.hedeoer.pojo.FirewallStatusInfo;
-import cn.hedeoer.pojo.PortInfo;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;
 import cn.hedeoer.util.AgentIdUtil;
-import cn.hedeoer.util.PortMonitorUtils;
+import cn.hedeoer.util.PingControlUtil;
 import cn.hedeoer.util.RedisUtil;
 import cn.hedeoer.util.WallUtil;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,9 +22,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.StreamEntryID;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.resps.StreamEntry;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 防火墙状态处理适配逻辑
@@ -52,7 +54,7 @@ public class FirewallStatusInfoAdapter implements Runnable {
                 StreamConsumer consumer = new StreamConsumer(jedis, pubStreamKey, groupName, consumerName);
 
                 //本次循环消费消息时最多阻塞1秒
-                List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 0);
+                List<StreamEntry> streamEntries = consumer.consumeNewMessages(1, 4000);
                 if (streamEntries.isEmpty()) {
                     continue;
                 }
@@ -62,7 +64,7 @@ public class FirewallStatusInfoAdapter implements Runnable {
                 FirewallStatusInfoAdapter.FireWallStatusInfoStreamEntry fireWallStatusInfoStreamEntry = fromMap(streamEntry.getFields());
 
                 // 判断此次端口规则操作的类型（PortInfoOpType枚举）
-                FireWallStatusOpType fireWallStatusOpType = judgeFireWallStatusInfoOPType(fireWallStatusInfoStreamEntry);
+                FirewallOperationType fireWallStatusOpType = judgeFireWallStatusInfoOPType(fireWallStatusInfoStreamEntry);
 
                 logger.info("将进行 {} 操作", fireWallStatusOpType.name());
 
@@ -70,6 +72,46 @@ public class FirewallStatusInfoAdapter implements Runnable {
                 switch (fireWallStatusOpType) {
                     case QUERY:
                         firewallStatusInfos = List.of(WallUtil.getFirewallStatusInfo());
+                        break;
+                    case RESTART:
+                        // 重启防火墙
+                        Boolean isRestartDone =  WallUtil.operateFireWall(fireWallStatusOpType);
+                        if (!isRestartDone) {
+                            consumeResult = ResponseResult.fail(firewallStatusInfos,"重启防火墙失败");
+                            break;
+                        }
+                        break;
+                    case START:
+                        // 启动防火墙
+                        Boolean isStartDone =  WallUtil.operateFireWall(fireWallStatusOpType);
+                        if (!isStartDone) {
+                            consumeResult = ResponseResult.fail(firewallStatusInfos,"启动防火墙失败");
+                            break;
+                        }
+                        break;
+                    case STOP:
+                        // 关闭防火墙
+                        Boolean isStopDone =  WallUtil.operateFireWall(fireWallStatusOpType);
+                        if (!isStopDone) {
+                            consumeResult = ResponseResult.fail(firewallStatusInfos,"关闭防火墙失败");
+                            break;
+                        }
+                        break;
+                    case BLOCKPING:
+                        // 禁止ping
+                        Boolean isBlockDone =  PingControlUtil.disablePing();
+                        if (!isBlockDone) {
+                            consumeResult = ResponseResult.fail(firewallStatusInfos,"禁止外部系统ping失败");
+                            break;
+                        }
+                        break;
+                    case UNBLOCKPING:
+                        // 启用ping
+                        Boolean isUnBlockDone = PingControlUtil.enablePing();
+                        if (!isUnBlockDone) {
+                            consumeResult = ResponseResult.fail(firewallStatusInfos,"启用外部系统ping失败");
+                            break;
+                        }
                         break;
                     default:
                         logger.error("不匹配任何规定的防火墙状态操作，{}", fireWallStatusOpType);
@@ -177,38 +219,75 @@ public class FirewallStatusInfoAdapter implements Runnable {
         private FirewallStatusInfo old;
     }
 
-    /**
-     * 防火墙状态操作类型
-     */
-    private enum FireWallStatusOpType {
-        QUERY,
-        START,
-        STOP,
-        RESTART,
-        PING
-    }
 
 
-    private FireWallStatusOpType  judgeFireWallStatusInfoOPType(FireWallStatusInfoStreamEntry fireWallStatusInfoStreamEntry) {
-        // 本次操作防火墙状态对应数据操作类型，（start，restart,stop,query）
+    private FirewallOperationType  judgeFireWallStatusInfoOPType(FireWallStatusInfoStreamEntry fireWallStatusInfoStreamEntry) {
+        // 本次操作防火墙状态对应数据操作类型，（query,start，restart,stop）
         String dataOpType = fireWallStatusInfoStreamEntry.getDataOpType();
+
+        FirewallOperationType fireWallStatusOpType = null;
         String agentComponentType = fireWallStatusInfoStreamEntry.getAgentComponentType();
 
-        boolean isQueryFirewallStatusInfo = "QUERY".equals(dataOpType)
-                && "FireWall".equals(agentComponentType);
+        Map<String, String> requestParams = fireWallStatusInfoStreamEntry.getRequestParams();
+        String operation = requestParams.get("operation");
+
+        boolean isQueryFirewallStatusInfo = false;
+        boolean isUpdateFirewallByRestart = false;
+        boolean isUpdateFirewallByStart = false;
+        boolean isUpdateFirewallByStop = false;
+        boolean blockPing = false;
+        boolean unBlockPing = false;
+
+        if ("firewall".equalsIgnoreCase(agentComponentType)) {
+
+            // 防火墙操作
+            isQueryFirewallStatusInfo = "QUERY".equals(dataOpType);
+
+            isUpdateFirewallByRestart = "UPDATE".equals(dataOpType)
+                    && operation.equals(FirewallOperationType.RESTART.getValue());
+
+            isUpdateFirewallByStart = "UPDATE".equals(dataOpType)
+                    && operation.equals(FirewallOperationType.START.getValue());
+
+            isUpdateFirewallByStop = "UPDATE".equals(dataOpType)
+                    && operation.equals(FirewallOperationType.STOP.getValue());
+
+            // 设置是否禁用Ping（禁止外部主机ping本机）
+            blockPing = "UPDATE".equals(dataOpType)
+                    && operation.equals(FirewallOperationType.BLOCKPING.getValue());
+
+            unBlockPing = "UPDATE".equals(dataOpType)
+                    && operation.equals(FirewallOperationType.UNBLOCKPING.getValue());
+
+        }
 
 
 
-        FireWallStatusOpType fireWallStatusOpType = null;
         // 查询操作
         if (isQueryFirewallStatusInfo) {
-            fireWallStatusOpType = FireWallStatusOpType.QUERY;
+            fireWallStatusOpType = FirewallOperationType.QUERY;
+        }else if  (isUpdateFirewallByRestart) {
+            fireWallStatusOpType = FirewallOperationType.RESTART;
+        }else if (isUpdateFirewallByStart){
+            fireWallStatusOpType = FirewallOperationType.START;
+        }else if (isUpdateFirewallByStop){
+            fireWallStatusOpType = FirewallOperationType.STOP;
+        }else if(blockPing){
+            fireWallStatusOpType = FirewallOperationType.BLOCKPING;
+        }else if(unBlockPing){
+            fireWallStatusOpType = FirewallOperationType.UNBLOCKPING;
+        }else{
+            // 什么也不做
         }
 
         return fireWallStatusOpType;
     }
 
     private static void publishMessges(Jedis jedis, String streamKey, StreamEntryID entryID, ResponseResult<List<FirewallStatusInfo>> consumeResult) {
+        // 检查连接是否有效
+        if (!"PONG".equals(jedis.ping())) {
+            throw new JedisConnectionException("Redis连接无效");
+        }
         //  1.  发布消息时如何指定 entryID 完成，
         //  2. agent向master注册时需要设计agent_Id的生成规则 完成，
         //  3. master的对于agent响应的数据是否需要持久化，需要，比如请求全部的端口规则

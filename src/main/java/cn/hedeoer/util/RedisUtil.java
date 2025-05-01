@@ -54,6 +54,12 @@ public class RedisUtil {
         // 空闲时检查有效性
         config.setTestWhileIdle(true);
 
+        // 在RedisUtil.initPool方法中修改配置
+        config.setTestWhileIdle(true);  // 确保这个设置为true
+        config.setTimeBetweenEvictionRunsMillis(30000);  // 每30秒检查一次空闲连接
+        config.setMinEvictableIdleTimeMillis(60000);  // 空闲60秒的连接可以被驱逐
+        config.setNumTestsPerEvictionRun(3);  // 每次检查3个连接
+
         if (password != null && !password.isEmpty()) {
             jedisPool = new JedisPool(config, host, port, timeout, password, database);
         } else {

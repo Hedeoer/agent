@@ -1,17 +1,15 @@
 package cn.hedeoer.util;
 
-import cn.hedeoer.pojo.FireWallType;
+import cn.hedeoer.common.FireWallType;
 import lombok.Data;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * 防火墙检测工具类, 只提供ufw和firewall检测

@@ -1,6 +1,4 @@
-package cn.hedeoer.pojo;
-
-import lombok.Data;
+package cn.hedeoer.common;
 
 /**
  * 操作系统类型枚举

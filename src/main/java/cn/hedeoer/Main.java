@@ -45,7 +45,7 @@ public class Main {
 
         // 2. 使用独立的线程池处理消费任务
         ThreadPoolExecutor consumerPool =
-                ThreadPoolUtil.createThreadPool(2, 2, 60, TimeUnit.SECONDS,
+                ThreadPoolUtil.createThreadPool(3, 3, 60, TimeUnit.SECONDS,
                         3, "consumer-pool");
 
         // 3. 分别启动任务

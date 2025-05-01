@@ -1,4 +1,4 @@
-package cn.hedeoer.pojo;
+package cn.hedeoer.common;
 
 /**
  * 防火墙枚举，支持 ufw， firewalld
