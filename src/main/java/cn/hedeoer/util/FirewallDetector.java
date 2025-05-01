@@ -1,17 +1,15 @@
 package cn.hedeoer.util;
 
-import cn.hedeoer.pojo.FireWallType;
+import cn.hedeoer.common.FireWallType;
 import lombok.Data;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * 防火墙检测工具类, 只提供ufw和firewall检测
@@ -27,8 +25,8 @@ public class FirewallDetector {
      * 目前只能监测ufw和firewalld
      * @return 包含防火墙检测结果的Map
      */
-    public static Map<String, FirewallStatus> detectFirewalls() {
-        Map<String, FirewallStatus> result = new HashMap<>();
+    public static Map<String, FirewallInstallStatus> detectFirewalls() {
+        Map<String, FirewallInstallStatus> result = new HashMap<>();
         
         // 检测不同的防火墙工具
         result.put("ufw", detectUfw());
@@ -42,10 +40,10 @@ public class FirewallDetector {
      * @return 如果同时启用了多种防火墙 (> 1)，返回true
      */
     public static boolean hasMultipleFirewallsEnabled() {
-        Map<String, FirewallStatus> firewalls = detectFirewalls();
+        Map<String, FirewallInstallStatus> firewalls = detectFirewalls();
         int enabledCount = 0;
         
-        for (FirewallStatus status : firewalls.values()) {
+        for (FirewallInstallStatus status : firewalls.values()) {
             if (status.isStarted()) {
                 enabledCount++;
             }
@@ -59,10 +57,10 @@ public class FirewallDetector {
      * @return 已启用的防火墙名称列表
      */
     public static List<String> getEnabledFirewalls() {
-        Map<String, FirewallStatus> firewalls = detectFirewalls();
+        Map<String, FirewallInstallStatus> firewalls = detectFirewalls();
         List<String> enabledFirewalls = new ArrayList<>();
         
-        for (Map.Entry<String, FirewallStatus> entry : firewalls.entrySet()) {
+        for (Map.Entry<String, FirewallInstallStatus> entry : firewalls.entrySet()) {
             if (entry.getValue().isStarted()) {
                 enabledFirewalls.add(entry.getKey());
             }
@@ -75,8 +73,8 @@ public class FirewallDetector {
      * 检测UFW防火墙
      * @return UFW防火墙状态
      */
-    public static FirewallStatus detectUfw() {
-        FirewallStatus status = new FirewallStatus();
+    public static FirewallInstallStatus detectUfw() {
+        FirewallInstallStatus status = new FirewallInstallStatus();
         status.setFireWallType(FireWallType.FIREWALLD);
         
         try {
@@ -116,8 +114,8 @@ public class FirewallDetector {
      * 检测Firewalld防火墙
      * @return Firewalld防火墙状态
      */
-    public static FirewallStatus detectFirewalld() {
-        FirewallStatus status = new FirewallStatus();
+    public static FirewallInstallStatus detectFirewalld() {
+        FirewallInstallStatus status = new FirewallInstallStatus();
         status.setFireWallType(FireWallType.FIREWALLD);
         
         try {
@@ -177,10 +175,10 @@ public class FirewallDetector {
 
     
     /**
-     * 防火墙状态类
+     * 系统防火墙安装状态类
      */
     @Data
-    public static class FirewallStatus {
+    public static class FirewallInstallStatus {
         // 防火墙名字
         private FireWallType fireWallType;
         // 是否已被安装
@@ -206,7 +204,7 @@ public class FirewallDetector {
      * @return 防火墙状态报告
      */
     public static String generateFirewallReport() {
-        Map<String, FirewallStatus> firewalls = detectFirewalls();
+        Map<String, FirewallInstallStatus> firewalls = detectFirewalls();
         List<String> enabledFirewalls = getEnabledFirewalls();
         boolean multipleEnabled = hasMultipleFirewallsEnabled();
         
@@ -215,7 +213,7 @@ public class FirewallDetector {
         
         // 各防火墙状态
         report.append("检测到的防火墙:\n");
-        for (FirewallStatus status : firewalls.values()) {
+        for (FirewallInstallStatus status : firewalls.values()) {
             report.append("- ").append(status.toString()).append("\n");
             if (status.isStarted() && !status.getDetails().isEmpty()) {
                 report.append("  详情: ").append(status.getDetails().replace("\n", "\n  ")).append("\n");

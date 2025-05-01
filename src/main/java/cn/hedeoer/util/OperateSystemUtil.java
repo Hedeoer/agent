@@ -1,6 +1,6 @@
 package cn.hedeoer.util;
 
-import cn.hedeoer.pojo.OSType;
+import cn.hedeoer.common.OSType;
 import oshi.SystemInfo;
 import oshi.hardware.CentralProcessor;
 import oshi.hardware.GlobalMemory;

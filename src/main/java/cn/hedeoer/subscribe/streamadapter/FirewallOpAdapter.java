@@ -7,7 +7,7 @@ import cn.hedeoer.firewalld.AbstractFirewallRule;
 import cn.hedeoer.firewalld.PortRule;
 import cn.hedeoer.firewalld.exception.FirewallException;
 import cn.hedeoer.firewalld.op.PortRuleServiceImpl;
-import cn.hedeoer.pojo.FireWallType;
+import cn.hedeoer.common.FireWallType;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;
 import cn.hedeoer.util.AgentIdUtil;
@@ -252,7 +252,7 @@ public class FirewallOpAdapter implements Runnable {
      * @return PortRuleOpType，如果无法判断，返回null
      */
     private static PortRuleOpType judgePortRuleOpType(PortRuleStreamEntry portRuleStreamEntry) {
-        // 该节点的某个资源类型，比如防火墙资源（cn.hedeoer.pojo.FireWallType.UFW 或者 cn.hedeoer.pojo.FireWallType.FIREWALLD）
+        // 该节点的某个资源类型，比如防火墙资源（cn.hedeoer.common.FireWallType.UFW 或者 cn.hedeoer.common.FireWallType.FIREWALLD）
         String agentComponentType = portRuleStreamEntry.getAgentComponentType();
 
         // 本次操作防火墙端口规则对应数据操作类型，（insert ， delete，update，query）
