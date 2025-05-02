@@ -1,0 +1,71 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+# 有些插件的配置（如coverage）
+.gitignore
+.idea
+.idea_modules/
+.idea_workspace.xml
+.idea/libraries/
+.idea/shelf/
+.idea/tasks.xml
+.idea/dictionaries/
+.idea/assetWizardSettings.xml
+.idea/vcs.xml
+.idea/modules.xml
+# 临时、调试、构建及运行相关文件
+.idea/.name
+.idea/httpRequests/
+# 编译输出
+*.class
+*.log
+
+# Maven
+target/
+
+# Gradle
+.gradle/
+build/
+
+# 日志
+*.log
+*.log.*
+
+# 包装器
+!gradle/wrapper/gradle-wrapper.jar
+.gradle/
+gradlew
+gradlew.bat
+
+# OS 缓存
+.DS_Store
+Thumbs.db
+
+# 环境变量等
+.env
+*.env
+
+# 一些常见临时目录
+logs/
+tmp/
+
+# JetBrains 运行配置
+.idea/runConfigurations/
+
+# 自动生成的文档
+doc/
+
+# 覆盖率等工具
+jacoco*.exec
+coverage/
+*.em
+
+# 其他（根据实际项目增减）：
+# .vscode/          # 如果你用了 VSCode 可加
+# *.swp             # vim 临时文件
+
+# 注释掉说明的可以按需添加
+agent.properties
