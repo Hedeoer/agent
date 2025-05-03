@@ -1,6 +1,6 @@
 package cn.hedeoer.subscribe.streamadapter;
 
-import cn.hedeoer.firewalld.PortRule;
+import cn.hedeoer.common.entity.PortRule;
 import org.junit.Test;
 
 import java.io.IOException;

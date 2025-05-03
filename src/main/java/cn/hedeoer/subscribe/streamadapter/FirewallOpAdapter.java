@@ -1,13 +1,15 @@
 package cn.hedeoer.subscribe.streamadapter;
 
+import cn.hedeoer.firewalld.PortRuleService;
+import cn.hedeoer.firewalld.ufw.op.PortRuleServiceImplByUFW;
 import cn.hedeoer.schedule.HeartBeat;
-import cn.hedeoer.common.ResponseResult;
-import cn.hedeoer.common.ResponseStatus;
-import cn.hedeoer.firewalld.AbstractFirewallRule;
-import cn.hedeoer.firewalld.PortRule;
-import cn.hedeoer.firewalld.exception.FirewallException;
-import cn.hedeoer.firewalld.op.PortRuleServiceImpl;
-import cn.hedeoer.common.FireWallType;
+import cn.hedeoer.common.entity.ResponseResult;
+import cn.hedeoer.common.enmu.ResponseStatus;
+import cn.hedeoer.common.entity.AbstractFirewallRule;
+import cn.hedeoer.common.entity.PortRule;
+import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
+import cn.hedeoer.firewalld.firewalld.op.PortRuleServiceImplByFirewalld;
+import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;
 import cn.hedeoer.util.AgentIdUtil;
@@ -35,12 +37,29 @@ import java.util.stream.Collectors;
 
 /**
  * 对redis stream的 数据做适配响应，比如 当添加或者删除一个防火墙规则时，需要调用方法
- * cn.hedeoer.firewalld.op.PortRuleService#addOrRemoveOnePortRule(java.lang.String, cn.hedeoer.firewalld.PortRule, java.lang.String)
+ * cn.hedeoer.firewalld.op.PortRuleService#addOrRemoveOnePortRule(java.lang.String, cn.hedeoer.common.entity.PortRule, java.lang.String)
  */
 public class FirewallOpAdapter implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(FirewallOpAdapter.class);
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private PortRuleService portRuleService;
+    private final FireWallType firewallType;
+
+    public FirewallOpAdapter() {
+        FireWallType firewallType = WallUtil.getFirewallType();
+        // 通过防火墙类型选择对应的实现类
+        if (FireWallType.UFW.equals(firewallType)) {
+            this.portRuleService = new PortRuleServiceImplByUFW();
+        } else if (FireWallType.FIREWALLD.equals(firewallType)) {
+            this.portRuleService = new PortRuleServiceImplByFirewalld();
+        } else {
+            logger.error("不支持的防火墙类型");
+        }
+
+        // 防火墙类型
+        this.firewallType = firewallType;
+
+    }
 
     @Override
     public void run() {
@@ -78,7 +97,6 @@ public class FirewallOpAdapter implements Runnable {
                 // 判断此次端口规则操作的类型（PortRuleOpType枚举）
                 PortRuleOpType portRuleOpType = judgePortRuleOpType(portRuleStreamEntry);
 
-                PortRuleServiceImpl portRuleService = new PortRuleServiceImpl();
                 //
                 Map<String, String> requestParams = portRuleStreamEntry.getRequestParams();
                 // 防火墙zone
@@ -92,14 +110,10 @@ public class FirewallOpAdapter implements Runnable {
                 Boolean consumeResultBoolean = null;
                 switch (portRuleOpType) {
                     case QUERY_ALL_PORTRULE:
-                        // 获取系统防火墙由那些区域（zoneName）比如block,dmz,docker,drop,external,hedeoeraa,home,internal,private,public,trusted,work
-                        List<String> zoneNames = WallUtil.getZoneNames();
-                        // 默认查询 zoneName 为public的区域的端口规则,zoneName为master节点通过redis发送的，默认值为public
-                        if (zoneNames.contains(zoneName)) {
-                            rules = portRuleService.queryAllPortRule(zoneName);
-                        }
+
+                        rules = portRuleService.queryAllPortRule(zoneName);
                         if (rules == null) {
-                            consumeResult = ResponseResult.fail(rules, "无法获取区域："+zoneName+" 的全部端口规则！！");
+                            consumeResult = ResponseResult.fail(rules, "无法获取区域：" + zoneName + " 的全部端口规则！！");
                             break;
                         }
                         break;
@@ -123,7 +137,7 @@ public class FirewallOpAdapter implements Runnable {
                         // if list<PortRule> need group by getting the number of zoneName(distinct)
                         // not
                         // need group
-                        Map<String , List<PortRule>> batchPortRulesMap =  getDistinctZoneNamesFromPortRules(datas);
+                        Map<String, List<PortRule>> batchPortRulesMap = getDistinctZoneNamesFromPortRules(datas);
                         for (Map.Entry<String, List<PortRule>> map : batchPortRulesMap.entrySet()) {
                             consumeResultBoolean = portRuleService.addOrRemoveBatchPortRules(zoneName, map.getValue(), dataOpType.toLowerCase());
                         }
@@ -153,9 +167,10 @@ public class FirewallOpAdapter implements Runnable {
                 }
                 consumeResult.setData(rules);
 
-                // 非查询操作需要加载防火墙使得配置生效
+                // 非查询操作并且要是firewalld防火墙工具才需要加载防火墙使得配置生效
                 if (ResponseStatus.SUCCESS.getResponseCode().equals(consumeResult.getStatus())
-                && !("query".equals(portRuleStreamEntry.getDataOpType()))) {
+                        && !("query".equals(portRuleStreamEntry.getDataOpType()))
+                        && firewallType.equals(FireWallType.FIREWALLD)) {
                     try {
                         WallUtil.reloadFirewall(FireWallType.FIREWALLD);
                         logger.info("重启防火墙 {} 成功", FireWallType.FIREWALLD);
@@ -178,6 +193,8 @@ public class FirewallOpAdapter implements Runnable {
                     Thread.sleep(1000);
                 } catch (InterruptedException ignored) {
                 }
+            } catch (FirewallException e) {
+                throw new RuntimeException(e);
             }
         }
 
@@ -186,6 +203,7 @@ public class FirewallOpAdapter implements Runnable {
 
     /**
      * get portrules group by zonename
+     *
      * @param datas total portrules
      * @return map
      */
@@ -194,8 +212,8 @@ public class FirewallOpAdapter implements Runnable {
         ArrayList<PortRule> list = new ArrayList<>();
 
         if (datas == null || datas.isEmpty()) {
-             map.put(null,list);
-             return map;
+            map.put(null, list);
+            return map;
         }
 
         List<String> zoneNames = datas.stream()
@@ -204,7 +222,7 @@ public class FirewallOpAdapter implements Runnable {
                 .collect(Collectors.toList());
 
         for (String zoneName : zoneNames) {
-            map.put(zoneName,new ArrayList<PortRule>());
+            map.put(zoneName, new ArrayList<PortRule>());
         }
 
         for (PortRule data : datas) {
@@ -252,7 +270,7 @@ public class FirewallOpAdapter implements Runnable {
      * @return PortRuleOpType，如果无法判断，返回null
      */
     private static PortRuleOpType judgePortRuleOpType(PortRuleStreamEntry portRuleStreamEntry) {
-        // 该节点的某个资源类型，比如防火墙资源（cn.hedeoer.common.FireWallType.UFW 或者 cn.hedeoer.common.FireWallType.FIREWALLD）
+        // 该节点的某个资源类型，比如防火墙资源（cn.hedeoer.common.enmu.FireWallType.UFW 或者 cn.hedeoer.common.enmu.FireWallType.FIREWALLD）
         String agentComponentType = portRuleStreamEntry.getAgentComponentType();
 
         // 本次操作防火墙端口规则对应数据操作类型，（insert ， delete，update，query）
@@ -291,7 +309,7 @@ public class FirewallOpAdapter implements Runnable {
             // 更新
         } else if (dataOpType.equals("UPDATE")) {
             portRuleOpType = PortRuleOpType.UPDATE_ONE_PORTRULE;
-        } else if(dataOpType.equals("OPTIONS")){
+        } else if (dataOpType.equals("OPTIONS")) {
             portRuleOpType = PortRuleOpType.OPTIONS;
         }
 
@@ -320,21 +338,21 @@ public class FirewallOpAdapter implements Runnable {
     @JsonIgnoreProperties(ignoreUnknown = true)
     @Builder
     public static class PortRuleStreamEntry {
-        
+
         private String agentId;
-        
+
         private String agentComponentType;
-        
+
         private String dataOpType;
-        
+
         private Map<String, String> requestParams;
-        
+
         private String ts;
-        
+
         private List<String> primaryKeyColumns;
-        
+
         private List<PortRule> data;
-        
+
         private PortRule old;
     }
 
