@@ -1,8 +1,8 @@
 package cn.hedeoer.pojo;
 
-import cn.hedeoer.common.FireWallStatus;
-import cn.hedeoer.common.FireWallType;
-import cn.hedeoer.common.PingStatus;
+import cn.hedeoer.common.enmu.FireWallStatus;
+import cn.hedeoer.common.enmu.FireWallType;
+import cn.hedeoer.common.enmu.PingStatus;
 import lombok.Builder;
 import lombok.Data;
 import lombok.ToString;

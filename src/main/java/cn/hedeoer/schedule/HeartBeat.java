@@ -1,6 +1,6 @@
 package cn.hedeoer.schedule;
 
-import cn.hedeoer.common.OSType;
+import cn.hedeoer.common.enmu.OSType;
 import cn.hedeoer.util.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

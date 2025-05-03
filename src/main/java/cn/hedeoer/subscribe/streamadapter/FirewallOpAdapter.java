@@ -1,13 +1,14 @@
 package cn.hedeoer.subscribe.streamadapter;
 
+import cn.hedeoer.firewalld.PortRuleService;
 import cn.hedeoer.schedule.HeartBeat;
-import cn.hedeoer.common.ResponseResult;
-import cn.hedeoer.common.ResponseStatus;
-import cn.hedeoer.firewalld.AbstractFirewallRule;
-import cn.hedeoer.firewalld.PortRule;
-import cn.hedeoer.firewalld.exception.FirewallException;
-import cn.hedeoer.firewalld.op.PortRuleServiceImpl;
-import cn.hedeoer.common.FireWallType;
+import cn.hedeoer.common.entity.ResponseResult;
+import cn.hedeoer.common.enmu.ResponseStatus;
+import cn.hedeoer.common.entity.AbstractFirewallRule;
+import cn.hedeoer.common.entity.PortRule;
+import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
+import cn.hedeoer.firewalld.firewalld.op.PortRuleServiceImplByFirewalld;
+import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;
 import cn.hedeoer.util.AgentIdUtil;
@@ -35,12 +36,17 @@ import java.util.stream.Collectors;
 
 /**
  * 对redis stream的 数据做适配响应，比如 当添加或者删除一个防火墙规则时，需要调用方法
- * cn.hedeoer.firewalld.op.PortRuleService#addOrRemoveOnePortRule(java.lang.String, cn.hedeoer.firewalld.PortRule, java.lang.String)
+ * cn.hedeoer.firewalld.op.PortRuleService#addOrRemoveOnePortRule(java.lang.String, cn.hedeoer.common.entity.PortRule, java.lang.String)
  */
 public class FirewallOpAdapter implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(FirewallOpAdapter.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final PortRuleService portRuleService;
+
+    public FirewallOpAdapter() {
+        this.portRuleService = new PortRuleServiceImplByFirewalld();
+    }
 
     @Override
     public void run() {
@@ -78,7 +84,6 @@ public class FirewallOpAdapter implements Runnable {
                 // 判断此次端口规则操作的类型（PortRuleOpType枚举）
                 PortRuleOpType portRuleOpType = judgePortRuleOpType(portRuleStreamEntry);
 
-                PortRuleServiceImpl portRuleService = new PortRuleServiceImpl();
                 //
                 Map<String, String> requestParams = portRuleStreamEntry.getRequestParams();
                 // 防火墙zone
@@ -178,6 +183,8 @@ public class FirewallOpAdapter implements Runnable {
                     Thread.sleep(1000);
                 } catch (InterruptedException ignored) {
                 }
+            } catch (FirewallException e) {
+                throw new RuntimeException(e);
             }
         }
 
@@ -252,7 +259,7 @@ public class FirewallOpAdapter implements Runnable {
      * @return PortRuleOpType，如果无法判断，返回null
      */
     private static PortRuleOpType judgePortRuleOpType(PortRuleStreamEntry portRuleStreamEntry) {
-        // 该节点的某个资源类型，比如防火墙资源（cn.hedeoer.common.FireWallType.UFW 或者 cn.hedeoer.common.FireWallType.FIREWALLD）
+        // 该节点的某个资源类型，比如防火墙资源（cn.hedeoer.common.enmu.FireWallType.UFW 或者 cn.hedeoer.common.enmu.FireWallType.FIREWALLD）
         String agentComponentType = portRuleStreamEntry.getAgentComponentType();
 
         // 本次操作防火墙端口规则对应数据操作类型，（insert ， delete，update，query）

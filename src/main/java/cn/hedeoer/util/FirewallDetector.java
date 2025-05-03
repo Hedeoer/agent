@@ -1,6 +1,6 @@
 package cn.hedeoer.util;
 
-import cn.hedeoer.common.FireWallType;
+import cn.hedeoer.common.enmu.FireWallType;
 import lombok.Data;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
