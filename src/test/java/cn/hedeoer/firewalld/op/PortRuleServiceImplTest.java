@@ -1,9 +1,10 @@
 package cn.hedeoer.firewalld.op;
 
-import cn.hedeoer.firewalld.PortRule;
-import cn.hedeoer.firewalld.SourceRule;
-import cn.hedeoer.firewalld.exception.FirewallException;
-import cn.hedeoer.common.FireWallType;
+import cn.hedeoer.common.entity.PortRule;
+import cn.hedeoer.common.entity.SourceRule;
+import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
+import cn.hedeoer.common.enmu.FireWallType;
+import cn.hedeoer.firewalld.firewalld.op.PortRuleServiceImplByFirewalld;
 import cn.hedeoer.util.DeepCopyUtil;
 import cn.hedeoer.util.WallUtil;
 import org.junit.Test;
@@ -18,7 +19,7 @@ public class PortRuleServiceImplTest {
 
     @Test
     public void queryAllPortRule() {
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
         List<PortRule> list = service.queryAllPortRule("public");
         for (PortRule port : list) {
             System.out.println(port);
@@ -27,7 +28,7 @@ public class PortRuleServiceImplTest {
 
     @Test
     public void addOrRemovePortRule() throws FirewallException {
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
         SourceRule sourceRule = new SourceRule("172.16.0.0/24,172.16.10.11");
         PortRule portRule = PortRule.builder()
                 .protocol("tcp")
@@ -59,7 +60,7 @@ public class PortRuleServiceImplTest {
                 .descriptor("Web HTTP")
                 .build();
 
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
         System.out.println(service.addOrRemoveOnePortRule("public", portRule2, "delete"));
     }
 
@@ -73,7 +74,7 @@ public class PortRuleServiceImplTest {
                 .policy(true)
                 .descriptor("add port")
                 .build();
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
         System.out.println(service.addOrRemoveOnePortRule("public", portRule, "delete"));
     }
 
@@ -87,7 +88,7 @@ public class PortRuleServiceImplTest {
                 .policy(false)
                 .descriptor("add port")
                 .build();
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
         System.out.println(service.addOrRemoveOnePortRule("public", portRule, "delete"));
     }
 
@@ -125,7 +126,7 @@ public class PortRuleServiceImplTest {
                 .build();
         rules.add(portRule2);
 
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
         Boolean aBoolean = service.addOrRemoveBatchPortRules("public", rules, "delete");
         System.out.println(aBoolean);
         if (aBoolean){
@@ -135,7 +136,7 @@ public class PortRuleServiceImplTest {
 
     @Test
     public void queryPortRulesByUsingStatus() {
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
 
         List<PortRule> rules = service.queryPortRulesByUsingStatus("public", Boolean.FALSE);
         rules.forEach(System.out::println);
@@ -143,7 +144,7 @@ public class PortRuleServiceImplTest {
 
     @Test
     public void updateOnePortRule() throws FirewallException {
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
         SourceRule sourceRule = new SourceRule("172.16.0.0/24,172.16.10.11");
         PortRule portRule = PortRule.builder()
                 .protocol("tcp")
@@ -167,7 +168,7 @@ public class PortRuleServiceImplTest {
 
     @Test
     public void queryPortRulesByPolicy() {
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
 
         List<PortRule> rules = service.queryPortRulesByPolicy("public", Boolean.TRUE);
         rules.forEach(System.out::println);
@@ -175,7 +176,7 @@ public class PortRuleServiceImplTest {
 
     @Test
     public void queryPortRulesByPolicyAndUsingStatus() {
-        PortRuleServiceImpl service = new PortRuleServiceImpl();
+        PortRuleServiceImplByFirewalld service = new PortRuleServiceImplByFirewalld();
 
         List<PortRule> rules = service.queryPortRulesByPolicyAndUsingStatus("public", null,null );
         rules.forEach(System.out::println);

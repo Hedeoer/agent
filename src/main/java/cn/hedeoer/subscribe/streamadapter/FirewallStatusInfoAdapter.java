@@ -1,8 +1,8 @@
 package cn.hedeoer.subscribe.streamadapter;
 
 
-import cn.hedeoer.common.FirewallOperationType;
-import cn.hedeoer.common.ResponseResult;
+import cn.hedeoer.common.enmu.FirewallOperationType;
+import cn.hedeoer.common.entity.ResponseResult;
 import cn.hedeoer.pojo.FirewallStatusInfo;
 import cn.hedeoer.subscribe.StreamConsumer;
 import cn.hedeoer.subscribe.StreamProducer;

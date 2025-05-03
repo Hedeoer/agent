@@ -1,11 +1,10 @@
 package cn.hedeoer.util;
 
-import cn.hedeoer.common.FireWallStatus;
-import cn.hedeoer.common.FirewallOperationType;
-import cn.hedeoer.common.PingStatus;
-import cn.hedeoer.firewalld.exception.FirewallException;
-import cn.hedeoer.firewalld.op.FirewallDRuleQuery;
-import cn.hedeoer.common.FireWallType;
+import cn.hedeoer.common.enmu.FireWallStatus;
+import cn.hedeoer.common.enmu.FirewallOperationType;
+import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
+import cn.hedeoer.firewalld.firewalld.op.FirewallDRuleQuery;
+import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.pojo.FirewallStatusInfo;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
@@ -14,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;

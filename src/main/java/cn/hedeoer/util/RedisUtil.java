@@ -16,7 +16,7 @@ public class RedisUtil {
 
     // 默认连接参数
     private static final String DEFAULT_HOST = "vm79";
-    private static final int DEFAULT_PORT = 6379;
+    private static final int DEFAULT_PORT = 63799;
     private static final int DEFAULT_TIMEOUT = 120000;
     private static final String DEFAULT_PASSWORD = null;
     private static final int DEFAULT_DATABASE = 0;

@@ -1,6 +1,6 @@
 package cn.hedeoer.util;
 
-import cn.hedeoer.common.PingStatus;
+import cn.hedeoer.common.enmu.PingStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeroturnaround.exec.ProcessExecutor;
