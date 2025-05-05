@@ -6,10 +6,7 @@ import cn.hedeoer.common.entity.SourceRule;
 import cn.hedeoer.firewalld.PortRuleService;
 import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
 import cn.hedeoer.pojo.PortInfo;
-import cn.hedeoer.util.DeepCopyUtil;
-import cn.hedeoer.util.IpUtils;
-import cn.hedeoer.util.PortMonitorUtils;
-import cn.hedeoer.util.WallUtil;
+import cn.hedeoer.util.*;
 import org.freedesktop.dbus.annotations.DBusInterfaceName;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
@@ -27,8 +24,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class PortRuleServiceImplByFirewalld implements PortRuleService {
-    private static final String FIREWALLD_PATH = "/org/fedoraproject/FirewallD1";
-    private static final String FIREWALLD_BUS_NAME = "org.fedoraproject.FirewallD1";
     private static final Logger logger = LoggerFactory.getLogger(PortRuleServiceImplByFirewalld.class);
 
     /**
@@ -39,29 +34,7 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
      */
     @Override
     public List<PortRule> queryAllPortRule(String zoneName) {
-        ArrayList<PortRule> portRules = new ArrayList<>();
-        try {
-            // 首先判断zone是否存在
-
-            // 查询zone下所有端口信息
-            DBusConnection dBusConnection = FirewallDRuleQuery.getDBusConnection();
-
-/*            // 获取firewalld服务的对象
-            String serviceName = "org.fedoraproject.FirewallD1";
-            String zonePath = "/org/fedoraproject/FirewallD1/zone/" + zoneName;
-            // 获取Zone对象
-            ZoneInterface zoneInterface = dBusConnection.getRemoteObject(serviceName, zonePath, ZoneInterface.class);*/
-
-            ZoneInterface zoneInterface = dBusConnection.getRemoteObject(
-                    FIREWALLD_BUS_NAME,
-                    FIREWALLD_PATH,
-                    ZoneInterface.class);
-            portRules = getPortRule(zoneInterface, zoneName);
-        } catch (DBusException e) {
-            throw new RuntimeException(e);
-        }
-
-        return portRules;
+        return queryAllPortRuleByParseCommand(zoneName);
     }
 
     /**
@@ -416,6 +389,7 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
         return allDone;
     }
 
+    @Deprecated
     private ArrayList<PortRule> getPortRule(ZoneInterface zoneInterface, String zoneName) {
         // 获取所有端口配置
         String[][] portArray = zoneInterface.getPorts(zoneName);
@@ -446,7 +420,10 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
                     .policy(policy)
                     .sourceRule(sourceRule)
                     .descriptor(des)
+                    .family("ipv4/ipv6")
                     .build();
+            // 默认规则持久化
+            portRule.setPermanent(true);
             portRulesFromDbusPortQuery.add(portRule);
         }
 
@@ -464,6 +441,11 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
             // 端口规则的描述
             String des = parsedRule.getDescription();
 
+            // 规则适用的ip协议族
+            String family = parsedRule.getFamily();
+
+            // 规则是否持久化
+            boolean permanent = parsedRule.isPermanent();
 
             PortRule portRule = PortRule.builder()
                     .port(portNumber)
@@ -472,10 +454,13 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
                     .policy(policy)
                     .sourceRule(sourceRule)
                     .descriptor(des)
+                    .family(family)
                     .build();
+            portRule.setPermanent(permanent);
             portRulesFromRichRules.add(portRule);
         }
 
+        // 去重规则依赖  PortRule 的实现 （agentId，permanent，type，zone + family，port、protocol）
         HashSet<PortRule> distinctPortRules = new HashSet<>();
         // 先添加 从富规则中提取的，如果后面有”重复“的，就不会添加成功，以从富规则中提取的为准
         distinctPortRules.addAll(portRulesFromRichRules);
@@ -485,7 +470,7 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
         logger.info("当前zone: {},从dbus端口查询中提取的端口规则有portRulesFromDbusPortQuery {} 条 :", zoneName, portRulesFromDbusPortQuery.size());
 
 
-        // 补充 端口规则中端口的使用状态 和  iptype， zone，type，permanent（默认为永久生效）,端口规则的描述
+        // 补充 端口规则中端口的使用状态 和  zone，type,端口规则的描述
         for (PortRule rule : distinctPortRules) {
 
             // 该条端口规则的端口，
@@ -514,13 +499,9 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
             }
 
             rule.setUsing(inUse);
-            String ipType = IpUtils.getIpType(port);
-            rule.setFamily(ipType);
             rule.setZone(zoneName);
             rule.setType(RuleType.PORT);
             rule.setDescriptor(descriptor);
-            // todo 后续需要补充判断规则是否是永久生效的逻辑，目前默认永久生效
-            rule.setPermanent(true);
         }
 
         // PortRule{port='9999', protocol='tcp', using=false, policy=true, sourceRule=SourceRule(source=172.16.0.99), descriptor='All IPs allowed'}
@@ -528,12 +509,14 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
         // 合并为 PortRule{port='9999', protocol='tcp/udp', using=false, policy=true, sourceRule=SourceRule(source=172.16.0.99), descriptor='All IPs allowed'}
         // 使用 Stream 合并相同端口的 TCP/UDP 规则
         Set<PortRule> mergedSet = distinctPortRules.stream()
-                // 1. 按port, using, sourceRule, descriptor分组
+                // 1. 按agentId，permanent，type，zone + family，port分组
                 .collect(Collectors.groupingBy(rule -> Arrays.asList(
-                        rule.getPort(),
-                        rule.getUsing(),
-                        rule.getSourceRule().getSource(),
-                        rule.getDescriptor()
+                        rule.getAgentId(),
+                        rule.isPermanent(),
+                        rule.getType(),
+                        rule.getZone(),
+                        rule.getFamily(),
+                        rule.getPort()
                 )))
                 .values().stream() // 处理每个分组
                 // 2. 对每组内的规则进行处理
@@ -591,17 +574,16 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
      */
     private boolean ifExistZone(String zoneName, String operation) throws FirewallException {
         try {
-            // 获取DBus连接
-            DBusConnection connection = FirewallDRuleQuery.getDBusConnection();
-
-            // 获取zone接口
-            FirewallDRuleQuery.FirewallDZoneInterface zoneInterface = connection.getRemoteObject(
-                    FIREWALLD_BUS_NAME,
-                    FIREWALLD_PATH,
-                    FirewallDRuleQuery.FirewallDZoneInterface.class);
 
             // 获取所有zones
-            List<String> zones = Arrays.asList(zoneInterface.getZones());
+            List<String> zones = new ArrayList<>();
+            // sudo firewall-cmd --get-zones
+            String commandQueryAllZoneNames = "sudo firewall-cmd --get-zones";
+            String zonesStr = WallUtil.execGetLine("sh", "-c", commandQueryAllZoneNames);
+            if (zonesStr !=null) {
+                // 空格
+                zones = List.of(zonesStr.split("\\s+"));
+            }
 
             // 检查zone是否存在
             boolean exists = zones.contains(zoneName);
@@ -635,9 +617,216 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
             }
 
             return true;
-        } catch (DBusException | IOException | InterruptedException | TimeoutException e) {
+        } catch (IOException | InterruptedException | TimeoutException e) {
             throw new FirewallException("Failed to check zone existence: " + e.getMessage(), e);
         }
+    }
+
+
+    /**
+     * 解析防火墙区域的端口规则，包括普通端口和富规则，封装为 {@link PortRule} 列表。
+     *
+     * 通过执行以下命令获取对应区域的端口配置信息：
+     * <ul>
+     *   <li>普通端口列表：<pre>sudo firewall-cmd --zone=zone --list-ports</pre></li>
+     *   <li>持久化端口列表：<pre>sudo firewall-cmd --permanent --zone=zone --list-ports</pre></li>
+     * </ul>
+     *
+     * 以及富规则列表：
+     * <ul>
+     *   <li>普通富规则：<pre>sudo firewall-cmd --zone=zone --list-rich-rules</pre></li>
+     *   <li>持久化富规则：<pre>sudo firewall-cmd --permanent --zone=zone --list-rich-rules</pre></li>
+     * </ul>
+     *
+     * <h3>关于端口规则（PortRule）对象映射说明：</h3>
+     * <p>
+     * 以示例端口 {@code 8086/tcp} 为例：
+     * <ul>
+     *   <li>family：IPv4 和 IPv6 均会生成一条对应端口规则，表示对这两种协议开放该端口</li>
+     *   <li>port：端口号，例如 8086</li>
+     *   <li>protocol：协议类型，例如 tcp</li>
+     *   <li>sourceRule：来源地址，例如 0.0.0.0，表示对所有来源开放</li>
+     *   <li>policy：访问策略，true 表示允许访问，false 表示拒绝</li>
+     * </ul>
+     * </p>
+     *
+     * <h3>关于富规则（Rich Rules） {@link PortRule} 对象映射说明：</h3>
+     * <p>
+     * 以示例规则：
+     * <pre>rule family="ipv4" source address="172.16.0.0/24" port port="6456" protocol="tcp" reject</pre>
+     *
+     * 解析内容：
+     * <ul>
+     *   <li>family：协议族，例如 ipv4</li>
+     *   <li>port：端口号，例如 6456</li>
+     *   <li>protocol：协议类型，例如 tcp</li>
+     *   <li>sourceRule：来源地址，例如 172.16.0.0/24；若为空，默认视为对所有地址开放</li>
+     *   <li>policy：访问策略，false 表示拒绝，true 表示接受</li>
+     * </ul>
+     * </p>
+     *
+     * <p>
+     * 其他属性（如 agentId、permanent、type、zone）：
+     * <ul>
+     *   <li>agentId：通过工具类获取</li>
+     *   <li>permanent：是否为持久化配置（由命令执行结果的差异判断）</li>
+     *   <li>type：规则类型，{@link RuleType#PORT}表示端口规则</li>
+     *   <li>zone：区域名，通过参数传入</li>
+     * </ul>
+     * </p>
+     *
+     * @param zoneName 防火墙区域名
+     * @return 返回封装所有端口规则的 {@link List<PortRule>}
+     */
+    public List<PortRule> queryAllPortRuleByParseCommand(String zoneName){
+
+        HashSet<PortRule> portRulesFromListPortCommand =  getAllPortFromListPort(zoneName);
+
+        HashSet<PortRule> portRulesFromListRuleRuleCommand =  getAllPortFromListRuleRule(zoneName);
+
+        // 涉及到去重，按照PortRule类中定义的规则去重 （含family，port、protocolsourceRule，policy 和父类属性（agentId，permanent，type，zone)）
+        portRulesFromListRuleRuleCommand.addAll(portRulesFromListPortCommand);
+
+        return new ArrayList<>(portRulesFromListRuleRuleCommand);
+    }
+
+    public HashSet<PortRule> getAllPortFromListRuleRule(String zoneName) {
+
+        HashSet<PortRule> result = new HashSet<>();
+
+        String command1 = "sudo firewall-cmd --zone="+zoneName+" --list-rich-rules";
+        String command2 = "sudo firewall-cmd --permanent --zone="+zoneName+" --list-rich-rules";
+        // 所有的富规则
+        String portRules = WallUtil.exec("sh", "-c",command1);
+        // 持久化的富规则
+        String portRulesWithPermanent = WallUtil.exec("sh", "-c",command2);
+
+        // 表示没有开放的端口
+        if (portRules.isEmpty()) {
+            return result;
+        }
+
+        List<String> portRulesList = List.of(portRules.split("\\r?\\n"));
+        List<String> portRulesPermanentList = List.of(portRulesWithPermanent.split("\\r?\\n"));
+
+        String agentId = AgentIdUtil.loadOrCreateUUID();
+        for (String ruleStr : portRulesList) {
+            List<FirewallRuleParser.ParsedRule> parsedRules = FirewallRuleParser.parseFirewallRule(ruleStr);
+            for (FirewallRuleParser.ParsedRule parsedRule : parsedRules) {
+
+                // 获取端口目前是否被使用？
+                List<PortInfo> portsInUse = PortMonitorUtils.getPortsInUse(parsedRule.getPort(),parsedRule.getProtocol());
+                boolean using = !portsInUse.isEmpty();
+
+                // 该富规则是否是持久化的？
+                boolean isPermanent = false;
+                if (!portRulesPermanentList.isEmpty()) {
+                    isPermanent = portRulesPermanentList.contains(ruleStr);
+                }
+
+                PortRule build = PortRule.builder()
+                        .descriptor(parsedRule.getDescription())
+                        .sourceRule(new SourceRule(parsedRule.getSource()))
+                        .policy("accept".equals(parsedRule.getPolicy()))
+                        .using(using)
+                        .protocol(parsedRule.getProtocol())
+                        .port(parsedRule.getPort())
+                        .family(parsedRule.getFamily())
+                        .build();
+                build.setAgentId(agentId);
+                build.setPermanent(isPermanent);
+                build.setType(RuleType.PORT);
+                build.setZone(zoneName);
+
+                result.add(build);
+
+            }
+        }
+
+
+        return result;
+    }
+
+    public HashSet<PortRule> getAllPortFromListPort(String zoneName) {
+
+        HashSet<PortRule> result = new HashSet<>();
+
+        String command1 = "sudo firewall-cmd --zone="+zoneName+" --list-ports";
+        String command2 = "sudo firewall-cmd --permanent --zone="+zoneName+" --list-ports";
+        String portsWithProtocols = WallUtil.execGetLine("sh", "-c",command1);
+        String portsWithProtocolPermanent = WallUtil.execGetLine("sh", "-c",command2);
+
+        // 表示没有开放的端口
+        if (portsWithProtocols == null || portsWithProtocols.isEmpty()) {
+            return result;
+        }
+
+        // 以空格分隔
+        String[] lines = portsWithProtocols.split("\\s+");
+        String agentId = AgentIdUtil.loadOrCreateUUID();
+        for (String line : lines) {
+            line = line.trim();
+            // 断言该行包含端口信息，例如：80/tcp 或 8080/tcp
+            if (line.matches("^(\\d+(-\\d+)?)/(tcp|udp)$")) {
+                String port = line.split("/")[0];
+                String protocol = line.split("/")[1];
+
+                // PortRule属性赋值
+                RuleType type = RuleType.PORT;
+                //是否持久化
+                boolean permanent= false;
+                // portsWithProtocolPermanent 不为null，表示有持久化开放的端口
+                if (portsWithProtocolPermanent != null) {
+                    permanent = portsWithProtocolPermanent.contains(line);
+                }
+
+                // family
+                String family = "ipv4";
+
+                // 如果端口描述为默认值 0.0.0.0，则考虑使用端口监听的进程名字填充
+                String descriptor = "0.0.0.0";
+
+                // 端口规则中的状态列含义：
+                // 当端口规则中端口为单个端口，比如 (tcp 4567)，using属性为true，表示该机器tcp下该端口正在被使用；为false，表示机器tcp的4567端口未被使用
+                // 当端口规则为端口为多个端口，比如 tcp（3456-6543) 或者  udp[23423,553,774]）。using属性为true,表示机器tcp 的 3456-6543范围内有端口被使用了；为false,表示机器tcp 的 3456-6543范围内所有端口都未被占用
+                // 具体端口使用详细信息查看PortInfoAdapter类实现
+                List<PortInfo> portsInUse = PortMonitorUtils.getPortsInUse(port,protocol);
+                boolean using = !portsInUse.isEmpty();
+                if (using) {
+                    StringBuilder stringBuilder = new StringBuilder();
+                    for (PortInfo portInfo : portsInUse) {
+                        stringBuilder.append(portInfo.getProcessName()).append(",");
+                    }
+                    descriptor = stringBuilder.toString();
+                }
+
+                boolean policy = true;
+
+                SourceRule sourceRule = new SourceRule("0.0.0.0");
+
+                PortRule build = PortRule.builder()
+                        .descriptor(descriptor)
+                        .sourceRule(sourceRule)
+                        .policy(policy)
+                        .using(using)
+                        .protocol(protocol)
+                        .port(port)
+                        .family(family)
+                        .build();
+                build.setAgentId(agentId);
+                build.setPermanent(permanent);
+                build.setType(type);
+                build.setZone(zoneName);
+
+                PortRule anotherBuild = DeepCopyUtil.deepCopy(build, PortRule.class);
+                anotherBuild.setFamily("ipv6");
+
+
+                result.add(build);
+                result.add(anotherBuild);
+            }
+        }
+        return result;
     }
 
 }

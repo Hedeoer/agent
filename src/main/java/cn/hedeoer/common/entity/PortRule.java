@@ -18,7 +18,7 @@ import java.util.Objects;
 @Builder
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PortRule extends AbstractFirewallRule {
-    private String family;    // ip type (ipv4 ,ipv6)
+    private String family;    // ip type (ipv4 ,ipv6,ipv4/ipv6)
     private String port;      // 端口号或范围 (如 "80" 或 "1024-2048")
     private String protocol;  // 协议 (tcp 或 udp)
     private Boolean using;    // 端口使用状态 （已使用，未使用）
@@ -27,7 +27,7 @@ public class PortRule extends AbstractFirewallRule {
     private String descriptor; //端口描述信息
 
     /**
-     * 对象比较只包含 port、protocol 和父类属性
+     * 对象比较只包含 family, port、protocol sourceRule，policy 和父类属性（agentId，permanent，type，zone）
      * @param o
      * @return
      */
@@ -36,12 +36,16 @@ public class PortRule extends AbstractFirewallRule {
         if (o == null || getClass() != o.getClass()) return false;
         if (!super.equals(o)) return false;
         PortRule portRule = (PortRule) o;
-        return Objects.equals(port, portRule.port) && Objects.equals(protocol, portRule.protocol);
+        return Objects.equals(family, portRule.family)
+                &&  Objects.equals(port, portRule.port)
+                && Objects.equals(protocol, portRule.protocol)
+                && Objects.equals(sourceRule,portRule.sourceRule)
+                && Objects.equals(policy,portRule.policy);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), port, protocol);
+        return Objects.hash(super.hashCode(), family,port, protocol,sourceRule,policy);
     }
 
 

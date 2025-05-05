@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 public class FirewallRuleParser {
 
-    // Class to represent a parsed rule
+    // 类为解析后的规则
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -25,50 +25,57 @@ public class FirewallRuleParser {
         private String source;
         private String policy;
         private String description;
-
+        private String family; // 新增 family 属性，默认 family 为 ipv4/ipv6，表示同时规则适用 ipv4 和 ipv6
+        private boolean permanent; // 新增 permanent 属性，表示规则是否持久化
     }
 
+    /**
+     * 解析防火墙规则字符串
+     *
+     * @param ruleStr 防火墙规则字符串
+     * @return 解析后的规则对象列表
+     */
     public static List<ParsedRule> parseFirewallRule(String ruleStr) {
         List<ParsedRule> parsedRules = new ArrayList<>();
 
-        // Extract all port and protocol combinations
+        // 提取端口和协议组合
         List<PortProtocol> portProtocols = new ArrayList<>();
         Pattern portPattern = Pattern.compile("port port=\"(\\d+)\" protocol=\"(\\w+)\"");
         Matcher portMatcher = portPattern.matcher(ruleStr);
-        
+
         while (portMatcher.find()) {
             portProtocols.add(new PortProtocol(
-                portMatcher.group(1),
-                portMatcher.group(2),
-                portMatcher.start()
+                    portMatcher.group(1),
+                    portMatcher.group(2),
+                    portMatcher.start()
             ));
         }
 
-        // Extract all source addresses
+        // 提取源地址
         List<SourceAddress> sourceAddresses = new ArrayList<>();
         Pattern sourcePattern = Pattern.compile("source address=\"([^\"]+)\"");
         Matcher sourceMatcher = sourcePattern.matcher(ruleStr);
-        
+
         while (sourceMatcher.find()) {
             sourceAddresses.add(new SourceAddress(
-                sourceMatcher.group(1),
-                sourceMatcher.start()
+                    sourceMatcher.group(1),
+                    sourceMatcher.start()
             ));
         }
 
-        // Extract all log prefixes (descriptions)
+        // 提取日志前缀（描述）
         List<LogPrefix> logPrefixes = new ArrayList<>();
         Pattern prefixPattern = Pattern.compile("log prefix=\"([^\"]+)\"");
         Matcher prefixMatcher = prefixPattern.matcher(ruleStr);
-        
+
         while (prefixMatcher.find()) {
             logPrefixes.add(new LogPrefix(
-                prefixMatcher.group(1),
-                prefixMatcher.start()
+                    prefixMatcher.group(1),
+                    prefixMatcher.start()
             ));
         }
 
-        // Extract policy，默认为null，表示这是一条错误的富规则，无法提取policy
+        // 提取策略，默认为 null，表示这是一条错误的富规则，无法提取政策信息
         String policy = null;
         if (ruleStr.endsWith("accept")) {
             policy = "accept";
@@ -78,65 +85,97 @@ public class FirewallRuleParser {
             policy = "drop";
         }
 
-        // For each port/protocol, find the relevant source and description
+        // 提取 family 信息
+        String family = null;
+        // 是否是同时适用于ipv4和ipv6？
+        boolean isMultiFamily = false;
+        Pattern familyPattern = Pattern.compile("family=\"(ipv[46])\"");
+        Matcher familyMatcher = familyPattern.matcher(ruleStr);
+        if (familyMatcher.find()) {
+            family = familyMatcher.group(1);
+        } else {
+            isMultiFamily = true;
+        }
+
+        // 提取 permanent 信息，默认值为 false
+        boolean permanent = false;
+        permanent = ruleStr.contains("--permanent");
+
+        // 对于每个端口 / 协议，查找相关的源地址和描述
         for (PortProtocol pp : portProtocols) {
             // 对于特殊功能策略 mark masquerade forward-port 直接丢弃
             if (policy != null) {
                 String source = findApplicableValue(sourceAddresses, pp.position);
                 String description = findApplicableValue(logPrefixes, pp.position);
 
-                parsedRules.add(new ParsedRule(pp.port, pp.protocol, source, policy, description));
+                // 添加所有解析到的信息到 ParsedRule 中
+                if (!isMultiFamily) {
+                    parsedRules.add(new ParsedRule(pp.port, pp.protocol, source, policy, description, family, permanent));
+                }else{
+                    // 如果该条富规则同时适用于ivp4和ipv6，则加入两条端口规则
+                    parsedRules.add(new ParsedRule(pp.port, pp.protocol, source, policy, description, "ipv4", permanent));
+                    parsedRules.add(new ParsedRule(pp.port, pp.protocol, source, policy, description, "ipv6", permanent));
+                }
             }
         }
 
         return parsedRules;
     }
 
-    // Find the source or log prefix that applies to a port by looking at positions
+    /**
+     * 根据端口位置查找适用的源地址或日志前缀
+     *
+     * @param values 源地址或日志前缀的列表
+     * @param portPosition 端口的位置
+     * @return 适用的值
+     */
     private static String findApplicableValue(List<? extends PositionedValue> values, int portPosition) {
         if (values.isEmpty()) {
-            return "0.0.0.0"; // Default for source
+            return "0.0.0.0"; // 默认源地址
         }
-        
-        // Find the most recently defined value before the port
+
+        // 查找在端口之前最近定义的值
         PositionedValue result = values.get(0);
         for (PositionedValue value : values) {
             if (value.position < portPosition && value.position > result.position) {
                 result = value;
             }
         }
-        
+
         return result.value;
     }
 
-    // Helper classes to keep track of positions in the string
+    // 帮助类：用于跟踪字符串中的位置
     private static abstract class PositionedValue {
         String value;
         int position;
-        
+
         public PositionedValue(String value, int position) {
             this.value = value;
             this.position = position;
         }
     }
-    
+
+    // 端口和协议的组合类
     private static class PortProtocol extends PositionedValue {
         String port;
         String protocol;
-        
+
         public PortProtocol(String port, String protocol, int position) {
             super("", position);
             this.port = port;
             this.protocol = protocol;
         }
     }
-    
+
+    // 源地址类
     private static class SourceAddress extends PositionedValue {
         public SourceAddress(String value, int position) {
             super(value, position);
         }
     }
-    
+
+    // 日志前缀类
     private static class LogPrefix extends PositionedValue {
         public LogPrefix(String value, int position) {
             super(value, position);
@@ -176,8 +215,10 @@ public class FirewallRuleParser {
 
         String ruleStr9 = "rule family=\"ipv6\" source address=\"2001:db8::/64\" port port=\"80\" protocol=\"tcp\" log prefix=\"IPv6 Web\" level=\"info\" accept";
 
+        String ruleStr10 = "rule \" source address=\"2001:db8::/64\" port port=\"80\" protocol=\"tcp\" log prefix=\"IPv6 Web\" level=\"info\" accept";
 
-        List<ParsedRule> rules = parseFirewallRule(ruleStr9);
+
+        List<ParsedRule> rules = parseFirewallRule(ruleStr10);
         
         System.out.println("解析结果：");
         System.out.println("端口号，协议， 源规则，策略， 规则描述");

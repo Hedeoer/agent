@@ -20,11 +20,11 @@ public class PortMonitorUtilsTest {
             System.out.println(info);
         }
 
-        System.out.println("端口6532是否被占用: " + isPortInUse("6532"));
+        System.out.println("端口22是否被占用: " + isPortInUse("22"));
 
         // 示例2: 获取指定端口列表的使用情况
         System.out.println("\n指定端口列表的使用情况:");
-        List<String> ports = Arrays.asList("6532");
+        List<String> ports = Arrays.asList("22");
         List<PortInfo> portListInfo = getPortsUsage(ports);
         for (PortInfo info : portListInfo) {
             System.out.println(info);
@@ -38,5 +38,6 @@ public class PortMonitorUtilsTest {
         System.out.println(PortMonitorUtils.getPortsInUse("6532","tcp"));
         System.out.println(PortMonitorUtils.getPortsInUse("6533","tcp"));
         System.out.println(PortMonitorUtils.getPortsInUse("","tcp"));
+        System.out.println(PortMonitorUtils.getPortsInUse("22","tcp"));
     }
 }

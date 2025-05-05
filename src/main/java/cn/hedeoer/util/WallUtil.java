@@ -242,28 +242,38 @@ public class WallUtil {
 
 
     // zt-exec 执行并返回首行
-    private static String execGetLine(String... cmd) throws Exception {
+    public static String execGetLine(String... cmd) {
         // 建议统一指定环境变量，防止乱码
-        ProcessResult result = new ProcessExecutor()
-                .command(cmd)
-                .readOutput(true)
-                .exitValues(0)
-                .environment("LANG", "en_US.UTF-8") // 增加这行
-                .timeout(5000, TimeUnit.SECONDS)
-                .execute();
+        ProcessResult result = null;
+        try {
+            result = new ProcessExecutor()
+                    .command(cmd)
+                    .readOutput(true)
+                    .exitValues(0)
+                    .environment("LANG", "en_US.UTF-8") // 增加这行
+                    .timeout(5000, TimeUnit.SECONDS)
+                    .execute();
+        } catch (IOException | InterruptedException | TimeoutException e) {
+            throw new RuntimeException(e);
+        }
         String out = result.outputString().trim();
         return out.isEmpty() ? null : out.split("\n")[0].trim();
     }
 
     // 执行并返回完整输出
-    private static String exec(String... cmd) throws Exception {
-        ProcessResult result = new ProcessExecutor()
-                .command(cmd)
-                .readOutput(true)
-                .exitValues(0)
-                .environment("LANG", "en_US.UTF-8") // 增加这行
-                .timeout(5000, TimeUnit.SECONDS)
-                .execute();
+    public static String exec(String... cmd) {
+        ProcessResult result = null;
+        try {
+            result = new ProcessExecutor()
+                    .command(cmd)
+                    .readOutput(true)
+                    .exitValues(0)
+                    .environment("LANG", "en_US.UTF-8") // 增加这行
+                    .timeout(5000, TimeUnit.SECONDS)
+                    .execute();
+        } catch (IOException | InterruptedException | TimeoutException e) {
+            throw new RuntimeException(e);
+        }
         return result.outputString().trim();
     }
 
