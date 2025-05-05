@@ -2,6 +2,7 @@ package cn.hedeoer.firewalld.firewalld.op;
 
 import cn.hedeoer.common.entity.PortRule;
 import cn.hedeoer.util.WallUtil;
+import com.google.gson.stream.JsonToken;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -48,6 +49,7 @@ public class PortRuleServiceImplByFirewalldTest {
     public void queryAllPortRule() {
         PortRuleServiceImplByFirewalld ob = new PortRuleServiceImplByFirewalld();
         List<PortRule> aPublic = ob.queryAllPortRule("public");
+        System.out.println(aPublic.size());
         aPublic.forEach(System.out::println);
     }
 }

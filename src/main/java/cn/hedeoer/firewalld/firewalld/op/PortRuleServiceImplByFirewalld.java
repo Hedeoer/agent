@@ -247,7 +247,7 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
             for (IpUtils.IpInfo sourceIpinfo : sourceIpInfos) {
                 String sourceIp = sourceIpinfo.getAddress();
                 // get ip type (ipv4 or ipv6)
-                String ipType = IpUtils.getIpType(portRule.getPort());
+                String ipType = portRule.getFamily();
                 // rich rule policy either accept or reject
                 policy = portRule.getPolicy() != null && portRule.getPolicy() ? "accept" : "reject";
 
@@ -275,13 +275,27 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
             //范围端口，如：3000-4000 firewall-cmd --add-port=3000-4000/tcp --permanent
 
             String permanentOpt = permanent ? " --permanent" : "";
-            command = String.format("firewall-cmd --zone=%s --%s-port=%s/%s %s",
-                    zoneName,
-                    operation,
-                    portRule.getPort(),
-                    portRule.getProtocol().toLowerCase(),
-                    permanentOpt);
-            commandList.add(command);
+            //
+            String makeUpForType = "ipv4".equals(portRule.getFamily()) ? "ipv6" : "ipv4";
+            String policy = Boolean.TRUE.equals(portRule.getPolicy())? "accept" : "reject";
+
+            if ("add".equals(operation)) {
+                String makeUpForAddCommand = "sudo firewall-cmd --zone="+zoneName+" --add-rich-rule='rule family=\""+portRule.getFamily()+"\" port port=\""+portRule.getPort()+"\" protocol=\""+portRule.getProtocol().toLowerCase()+"\" "+policy+"' "+permanentOpt;
+                commandList.add(makeUpForAddCommand);
+            }else{
+
+                command = String.format("firewall-cmd --zone=%s --%s-port=%s/%s %s",
+                        zoneName,
+                        operation,
+                        portRule.getPort(),
+                        portRule.getProtocol().toLowerCase(),
+                        permanentOpt);
+                commandList.add(command);
+
+                // sudo firewall-cmd --zone=public --add-rich-rule='rule family="ipv4" port port="8085" protocol="tcp" accept' --permanent
+                String makeUpForRemoveCommand = "sudo firewall-cmd --zone="+zoneName+" --add-rich-rule='rule family=\""+makeUpForType+"\" port port=\""+portRule.getPort()+"\" protocol=\""+portRule.getProtocol().toLowerCase()+"\" "+policy+"' "+permanentOpt;
+                commandList.add(makeUpForRemoveCommand);
+            }
         }
 
 
