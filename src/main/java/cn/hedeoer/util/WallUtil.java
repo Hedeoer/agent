@@ -1,10 +1,10 @@
 package cn.hedeoer.util;
 
 import cn.hedeoer.common.enmu.FireWallStatus;
+import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.common.enmu.FirewallOperationType;
 import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
 import cn.hedeoer.firewalld.firewalld.op.FirewallDRuleQuery;
-import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.pojo.FirewallStatusInfo;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.ProcessResult;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -151,15 +152,50 @@ public class WallUtil {
     }
 
 
-    // 检查命令是否存在
+    /**
+     * 检查命令是否存在
+     * @param command 要检查的命令
+     * @return 命令是否存在
+     */
     private static boolean isCommandExist(String command) {
         try {
-            String result = execGetLine("command", "-v", command);
+            // 使用 "which" 命令检查，这在大多数 Linux 发行版中都可用
+            String result = execGetLine("sudo","which", command);
+            if (result != null && !result.trim().isEmpty()) {
+                return true;
+            }
+
+            // 如果 which 命令失败，尝试使用 bash -c 执行 command -v
+            result = execGetLine("bash", "-c", "command -v " + command);
             return result != null && !result.trim().isEmpty();
         } catch (Exception e) {
-            return false;
+            // 如果上述方法都失败，检查常见路径
+            return checkCommonPaths(command);
         }
     }
+
+    /**
+     * 检查命令在常见路径中是否存在
+     * @param command 要检查的命令
+     * @return 命令是否存在
+     */
+    private static boolean checkCommonPaths(String command) {
+        String[] commonPaths = {
+                "/usr/sbin/" + command,
+                "/sbin/" + command,
+                "/usr/bin/" + command,
+                "/bin/" + command
+        };
+
+        for (String path : commonPaths) {
+            File file = new File(path);
+            if (file.exists() && file.canExecute()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     // 获取防火墙类型
     public static FireWallType  getFirewallType() {
@@ -242,22 +278,28 @@ public class WallUtil {
 
 
     // zt-exec 执行并返回首行
-    public static String execGetLine(String... cmd) {
-        // 建议统一指定环境变量，防止乱码
-        ProcessResult result = null;
+    /**
+     * 执行命令并返回首行输出
+     * @param cmd 要执行的命令及参数
+     * @return 命令输出的第一行，如果没有输出则返回null
+     * @throws Exception 执行过程中的异常
+     */
+    public static String execGetLine(String... cmd)  {
         try {
-            result = new ProcessExecutor()
+            ProcessResult result = new ProcessExecutor()
                     .command(cmd)
                     .readOutput(true)
-                    .exitValues(0)
-                    .environment("LANG", "en_US.UTF-8") // 增加这行
-                    .timeout(5000, TimeUnit.SECONDS)
+                    .exitValues(0, 1) // 允许退出代码为0或1，因为某些命令在未找到时返回1
+                    .environment("LANG", "en_US.UTF-8")
+                    .timeout(10, TimeUnit.SECONDS) // 缩短超时时间到10秒
                     .execute();
-        } catch (IOException | InterruptedException | TimeoutException e) {
-            throw new RuntimeException(e);
+
+            String out = result.outputString().trim();
+            return out.isEmpty() ? null : out.split("\n")[0].trim();
+        } catch (Exception e) {
+            // 如果是超时或其他预期内的异常，直接返回null
+            return null;
         }
-        String out = result.outputString().trim();
-        return out.isEmpty() ? null : out.split("\n")[0].trim();
     }
 
     // 执行并返回完整输出

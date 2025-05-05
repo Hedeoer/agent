@@ -15,4 +15,9 @@ public class WallUtilTest {
 
         zoneNames.forEach(System.out::println);
     }
+
+    @Test
+    public void getWallType() {
+        System.out.println(WallUtil.getFirewallType());
+    }
 }
