@@ -23,12 +23,18 @@ public class IpUtils {
     }
 
     /**
-     * 判断给定的IP地址是否为IPv6地址
+     * 判断给定的IP地址是否为IPv6地址（支持CIDR表示法）
      *
-     * @param ip IP地址字符串
+     * @param ipWithPossibleCidr IP地址字符串，可能包含CIDR表示法
      * @return 如果是IPv6地址则返回true，否则返回false
      */
-    public static boolean isIpv6(String ip) {
+    public static boolean isIpv6(String ipWithPossibleCidr) {
+        // 移除CIDR部分（如果存在）
+        String ip = ipWithPossibleCidr;
+        if (ip.contains("/")) {
+            ip = ip.substring(0, ip.indexOf("/"));
+        }
+
         try {
             InetAddress inetAddress = InetAddress.getByName(ip);
             return inetAddress instanceof Inet6Address;

@@ -1,4 +1,4 @@
-package cn.hedeoer.firewalld.ufw;
+package cn.hedeoer.firewall.ufw;
 
 import java.util.ArrayList;
 import java.util.List;

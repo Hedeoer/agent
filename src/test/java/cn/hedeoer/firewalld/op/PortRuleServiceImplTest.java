@@ -2,9 +2,9 @@ package cn.hedeoer.firewalld.op;
 
 import cn.hedeoer.common.entity.PortRule;
 import cn.hedeoer.common.entity.SourceRule;
-import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
+import cn.hedeoer.firewall.firewalld.exception.FirewallException;
 import cn.hedeoer.common.enmu.FireWallType;
-import cn.hedeoer.firewalld.firewalld.op.PortRuleServiceImplByFirewalld;
+import cn.hedeoer.firewall.firewalld.op.PortRuleServiceImplByFirewalld;
 import cn.hedeoer.util.DeepCopyUtil;
 import cn.hedeoer.util.WallUtil;
 import org.junit.Test;

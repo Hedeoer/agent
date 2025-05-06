@@ -1,13 +1,12 @@
 package cn.hedeoer.firewalld.ufw.op;
 
 import cn.hedeoer.common.entity.PortRule;
-import cn.hedeoer.firewalld.PortRuleService;
+import cn.hedeoer.firewall.PortRuleService;
+import cn.hedeoer.firewall.ufw.op.PortRuleServiceImplByUFW;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
-
-import static org.junit.Assert.*;
 
 public class PortRuleServiceImplByUFWTest {
 
@@ -40,6 +39,7 @@ public class PortRuleServiceImplByUFWTest {
          * 53/udp	(v6) DENY	OUT	# 拒绝DNS出站
          */
         List<PortRule> portRules = portRuleService.queryAllPortRule("public");
+        System.out.println(portRules.size());
         portRules.forEach(System.out::println);
     }
 }

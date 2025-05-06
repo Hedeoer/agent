@@ -4,8 +4,6 @@ import org.junit.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.*;
-
 public class WallUtilTest {
 
     @Test
@@ -30,5 +28,10 @@ public class WallUtilTest {
         System.out.println(command);
         System.out.println(ipv4Command);
         System.out.println(ipv6Command);
+    }
+
+    @Test
+    public void firewallStatusTest(){
+        System.out.println(WallUtil.getFirewallStatusInfo());
     }
 }

@@ -1,11 +1,11 @@
-package cn.hedeoer.firewalld.ufw;
+package cn.hedeoer.firewall.ufw;
+
+import cn.hedeoer.util.IpUtils;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * UFW 防火墙规则
@@ -38,11 +38,11 @@ public class UfwRule {
         // 检查规则是否启用
         rule.enabled = !line.contains("[disabled]") && !line.contains("[DISABLED]");
 
+        rule.isIpv6 = line.contains("(v6)");
+
         // 移除状态指示符
         line = line.replaceAll("\\[\\w+\\]", "").trim();
 
-        // 检查是否为 IPv6 规则
-        rule.isIpv6 = line.contains("(v6)");
 
         // 分离注释部分 (处理注释中可能包含的 # 字符)
         int commentIndex = -1;
@@ -114,6 +114,19 @@ public class UfwRule {
                 return null;
             }
         }
+
+        // 检查是否为 IPv6 规则
+        // 22 (v6)                    ALLOW IN    Anywhere (v6)
+        // 8102/tcp                   ALLOW IN    2001:db8::/64              # Explicitly IPv6 rule
+        // ufw对于 source来源模糊的规则，比如Anywhere，不清晰是适用于ipv4还是ipv6，给出(v6)字样明确标识
+        // ufw对于 可以通过source来源明确的规则，比如2001:db8::/64，清晰是适用于ipv6，不给出(v6)字样
+        boolean isIpv6 = false;
+        if (line.contains("(v6)")) {
+            isIpv6 = true;
+        }else if (!rule.from.contains("Anywhere")) {
+            isIpv6 = IpUtils.isIpv6(rule.from);
+        }
+        rule.setIpv6(isIpv6);
 
         // 标准化 Action (有时可能包含额外的空格或小写字母)
         if (rule.action != null) {

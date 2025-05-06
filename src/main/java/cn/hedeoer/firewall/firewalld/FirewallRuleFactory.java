@@ -1,4 +1,4 @@
-package cn.hedeoer.firewalld.firewalld;
+package cn.hedeoer.firewall.firewalld;
 
 import cn.hedeoer.common.enmu.RuleType;
 import cn.hedeoer.common.entity.*;

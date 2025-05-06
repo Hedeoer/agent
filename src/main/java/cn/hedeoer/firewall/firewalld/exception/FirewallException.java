@@ -1,4 +1,4 @@
-package cn.hedeoer.firewalld.firewalld.exception;
+package cn.hedeoer.firewall.firewalld.exception;
 
 /**
  * 防火墙异常类

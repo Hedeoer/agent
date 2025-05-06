@@ -3,8 +3,8 @@ package cn.hedeoer.util;
 import cn.hedeoer.common.enmu.FireWallStatus;
 import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.common.enmu.FirewallOperationType;
-import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
-import cn.hedeoer.firewalld.firewalld.op.FirewallDRuleQuery;
+import cn.hedeoer.firewall.firewalld.exception.FirewallException;
+import cn.hedeoer.firewall.firewalld.op.FirewallDRuleQuery;
 import cn.hedeoer.pojo.FirewallStatusInfo;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
 import org.freedesktop.dbus.exceptions.DBusException;
@@ -231,14 +231,13 @@ public class WallUtil {
                 statusText =  execGetLine("systemctl", "is-active", "firewalld");
             }else if (type == FireWallType.UFW) {
                 // ufw status | grep -i status | awk '{print $2;}'
-                String out = exec("ufw", "status");
+                String out = exec("sudo","ufw", "status");
                 if (out == null) statusText = "unknown";
                 for (String line : out.split("\n")) {
                     if (line.toLowerCase().contains("status:")) {
                         statusText =  line.split(":", 2)[1].trim();
                     }
                 }
-                statusText = "unknown";
             }else{
                 statusText =  "not installed";
             }
@@ -256,7 +255,7 @@ public class WallUtil {
             }
             if (type == FireWallType.UFW) {
                 // ufw version | grep -i ufw | awk '{print $2;}'
-                String out = exec("ufw", "version");
+                String out = exec("sudo","ufw", "version");
                 if (out != null) {
                     for (String line : out.split("\n")) {
                         if (line.toLowerCase().contains("ufw")) {

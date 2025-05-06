@@ -1,7 +1,7 @@
-package cn.hedeoer.firewalld;
+package cn.hedeoer.firewall;
 
 import cn.hedeoer.common.entity.PortRule;
-import cn.hedeoer.firewalld.firewalld.exception.FirewallException;
+import cn.hedeoer.firewall.firewalld.exception.FirewallException;
 
 import java.util.List;
 

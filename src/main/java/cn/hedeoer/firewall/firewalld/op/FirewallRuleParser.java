@@ -1,4 +1,4 @@
-package cn.hedeoer.firewalld.firewalld.op;
+package cn.hedeoer.firewall.firewalld.op;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

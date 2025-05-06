@@ -1,15 +1,13 @@
 package cn.hedeoer.firewalld.firewalld.op;
 
 import cn.hedeoer.common.entity.PortRule;
+import cn.hedeoer.firewall.firewalld.op.PortRuleServiceImplByFirewalld;
 import cn.hedeoer.util.WallUtil;
-import com.google.gson.stream.JsonToken;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-
-import static org.junit.Assert.*;
 
 public class PortRuleServiceImplByFirewalldTest {
 

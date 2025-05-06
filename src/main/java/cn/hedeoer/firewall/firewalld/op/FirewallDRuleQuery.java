@@ -1,4 +1,4 @@
-package cn.hedeoer.firewalld.firewalld.op;
+package cn.hedeoer.firewall.firewalld.op;
 
 import org.freedesktop.dbus.annotations.DBusInterfaceName;
 import org.freedesktop.dbus.connections.impl.DBusConnection;
