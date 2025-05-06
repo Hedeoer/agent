@@ -40,7 +40,7 @@ public class FirewallRuleParser {
 
         // 提取端口和协议组合
         List<PortProtocol> portProtocols = new ArrayList<>();
-        Pattern portPattern = Pattern.compile("port port=\"(\\d+)\" protocol=\"(\\w+)\"");
+        Pattern portPattern = Pattern.compile("port port=\"(\\d+(?:-\\d+)?)\" protocol=\"(\\w+)\"");
         Matcher portMatcher = portPattern.matcher(ruleStr);
 
         while (portMatcher.find()) {
@@ -217,8 +217,9 @@ public class FirewallRuleParser {
 
         String ruleStr10 = "rule \" source address=\"2001:db8::/64\" port port=\"80\" protocol=\"tcp\" log prefix=\"IPv6 Web\" level=\"info\" accept";
 
+        String ruleStr11 = "rule family=\"ipv4\" source address=\"172.16.10.11\" port port=\"8234-8235\" protocol=\"tcp\" reject";
 
-        List<ParsedRule> rules = parseFirewallRule(ruleStr10);
+        List<ParsedRule> rules = parseFirewallRule(ruleStr11);
         
         System.out.println("解析结果：");
         System.out.println("端口号，协议， 源规则，策略， 规则描述");
