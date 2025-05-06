@@ -214,6 +214,46 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
         return res;
     }
 
+    /**
+     * 在指定的 firewalld 区域中添加或删除端口规则（支持普通规则和富规则）。
+     * <p>
+     * 此方法负责根据提供的 {@code portRule} 对象和 {@code operation} 类型，
+     * 通过执行 `firewall-cmd` 命令来管理防火墙规则。
+     * 主要功能包括：
+     * <ul>
+     * <li>参数校验。</li>
+     * <li>检查目标区域是否存在，如果不存在且操作为添加，则尝试创建该区域。</li>
+     * <li>根据 {@code portRule} 的属性（如源IP、端口、协议、策略、持久化、IP族）构建相应的 `firewall-cmd` 命令。</li>
+     * <li>支持处理 IPv4、IPv6 或同时处理两种 IP 协议族 ("ipv4/ipv6") 的规则。</li>
+     * <li>处理简单规则和带有源地址限制的富规则。</li>
+     * <li>执行构建好的命令，并检查返回码以确定操作是否成功（特定返回码如 ALREADY_ENABLED 或 NOT_ENABLED 也视为成功）。</li>
+     * <li>如果规则是持久化的 (permanent)，则在操作成功后重新加载防火墙配置。</li>
+     * <li>针对简单规则的删除操作，会特殊处理以确保只移除指定IP族的规则（通过弥补操作，因为`--remove-port`会同时移除v4和v6）。</li>
+     * </ul>
+     *
+     * @param zoneName 要操作的 firewalld 区域的名称 (例如 "public", "internal")。不能为空。
+     * @param portRule 包含端口规则详细信息的对象。必须包含有效的端口和协议。
+     * 其属性包括：
+     * <ul>
+     * <li>{@code port}: 端口号。</li>
+     * <li>{@code protocol}: 协议 (例如 "tcp", "udp")。</li>
+     * <li>{@code sourceRule}: (可选) 源地址规则。如果提供且源地址非 "0.0.0.0"，则创建富规则。</li>
+     * <li>{@code policy}: (可选, 默认为 accept) 规则策略，true 代表 "accept"，false 代表 "reject"。</li>
+     * <li>{@code permanent}: 规则是否为持久化的。true 表示永久规则，false 表示运行时规则。</li>
+     * <li>{@code family}: IP 协议族 ("ipv4", "ipv6", 或 "ipv4/ipv6")。</li>
+     * </ul>
+     * @param operation 要执行的操作，必须是 "insert" (添加) 或 "delete" (删除)。
+     * @return 如果操作成功执行（包括规则已存在于添加操作，或规则不存在于删除操作等幂等情况），则返回 {@code true}。
+     * @throws FirewallException 如果发生以下任一情况：
+     * <ul>
+     * <li>输入参数无效（例如 {@code portRule} 为 null，操作不是 "insert" 或 "delete"，端口/协议无效）。</li>
+     * <li>检查或创建防火墙区域时失败。</li>
+     * <li>尝试删除规则时，指定的区域不存在。</li>
+     * <li>执行 `firewall-cmd` 命令失败，并返回了非预期（非 0, 11, 12, 16, 34）的退出码。</li>
+     * <li>重新加载防火墙配置失败（仅当规则是持久化时）。</li>
+     * <li>在执行外部进程时发生 {@link java.io.IOException}、{@link java.lang.InterruptedException} 或 {@link java.util.concurrent.TimeoutException}。</li>
+     * </ul>
+     */
     private Boolean addOrRemovePortRule(String zoneName, PortRule portRule, String operation) throws FirewallException {
         // 参数校验
         if (portRule == null || !("insert".equals(operation) || "delete".equals(operation)) ||
