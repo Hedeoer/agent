@@ -1,288 +1,296 @@
 package cn.hedeoer.firewall.ufw;
 
-import cn.hedeoer.util.IpUtils;
-
+import cn.hedeoer.util.IpUtils; // 假设 IpUtils.isIpv6(String ip) 方法有效
+import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
- * UFW 防火墙规则
- * 表示单条防火墙规则，包含端口/协议、动作、方向、来源/目标和注释
+ * UFW 防火墙规则对象
+ * 表示一条从 'ufw status numbered' 命令输出中解析得到的防火墙规则。
+ * 包含规则编号、目标、动作、方向、来源、注释、IPv6状态和启用状态。
  */
 public class UfwRule {
-    private String to;          // 目标端口/协议
-    private String action;      // 动作 (ALLOW, DENY, REJECT, LIMIT)
-    private String direction;   // 方向 (IN, OUT)
-    private String from;        // 来源
-    private String comment;     // 注释
-    private boolean isIpv6;     // 是否为 IPv6 规则
-    private boolean enabled;    // 规则是否启用
+    private int ruleNumber = -1;
+    private String to;
+    private String action;
+    private String direction;
+    private String from;
+    private String comment;
+    private boolean isIpv6;
+    private boolean enabled;
 
-    /**
-     * 从 UFW 状态输出格式解析规则
-     * 这种格式通常有固定的列宽和对齐方式
-     * @param line 单行规则文本
-     * @return 解析后的 UfwRule 对象，如果无法解析则返回 null
-     */
-    public static UfwRule parseFromStatus(String line) {
-        // 忽略表头行和分隔行
-        if (line == null || line.trim().isEmpty() ||
-                line.contains("--") || line.contains("To") && line.contains("Action") && line.contains("From")) {
+    private static final Pattern NUMBERED_RULE_PATTERN = Pattern.compile("^\\[\\s*(\\d+)\\]\\s*(.*)");
+
+    // 核心正则表达式，应用于清理后的 rulePart (已移除 (v6), (out), (in) 等标记)
+    // 捕获组:
+    // 1: To
+    // 2: Action (可能是 Action+Direction)
+    // 3: Direction (可选, 如果 Action 和 Direction 分开)
+    // 4: From
+    private static final Pattern CORE_RULE_PATTERN =
+            Pattern.compile("^(\\S+)\\s{2,}(\\S+)(?:\\s+(\\S+))?\\s{2,}(\\S+)\\s*$");
+
+    // 备用三列结构 "To Action From"
+    private static final Pattern THREE_COLUMN_PATTERN =
+            Pattern.compile("^(\\S+)\\s{2,}(\\S+)\\s{2,}(\\S+)\\s*$");
+
+    // 检查端口格式，用于辅助判断 "To" 字段是否为 IP
+    private static final Pattern NUMERIC_PORT_PATTERN = Pattern.compile("^\\d+(:\\d+)?(/\\w+)?$");
+
+
+    public UfwRule() {
+    }
+
+    public static UfwRule parseFromStatus(String rawLine) {
+        if (rawLine == null || rawLine.trim().isEmpty() ||
+                rawLine.contains("--") ||
+                (rawLine.contains("To") && rawLine.contains("Action") && rawLine.contains("From"))) {
             return null;
         }
 
         UfwRule rule = new UfwRule();
+        String lineToParse = rawLine.trim();
 
-        // 检查规则是否启用
-        rule.enabled = !line.contains("[disabled]") && !line.contains("[DISABLED]");
+        // 1. 解析并移除规则编号
+        Matcher numberedMatcher = NUMBERED_RULE_PATTERN.matcher(lineToParse);
+        if (numberedMatcher.find()) {
+            try {
+                rule.ruleNumber = Integer.parseInt(numberedMatcher.group(1));
+            } catch (NumberFormatException e) {
+                System.err.println("警告: 无法从行中解析规则编号: " + lineToParse);
+                rule.ruleNumber = -1;
+            }
+            lineToParse = numberedMatcher.group(2).trim();
+        }
 
-        rule.isIpv6 = line.contains("(v6)");
+        // 2. 检查规则是否被禁用
+        if (lineToParse.toLowerCase(Locale.ROOT).contains("[disabled]")) {
+            rule.enabled = false;
+            lineToParse = lineToParse.replaceAll("(?i)\\[disabled\\]", "").trim();
+        } else {
+            rule.enabled = true;
+        }
 
-        // 移除状态指示符
-        line = line.replaceAll("\\[\\w+\\]", "").trim();
-
-
-        // 分离注释部分 (处理注释中可能包含的 # 字符)
-        int commentIndex = -1;
+        // 3. 分离注释
+        String rulePart;
+        int commentStartIndex = -1;
         boolean inQuotes = false;
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
+        for (int i = 0; i < lineToParse.length(); i++) {
+            char c = lineToParse.charAt(i);
             if (c == '"' || c == '\'') {
                 inQuotes = !inQuotes;
             } else if (c == '#' && !inQuotes) {
-                commentIndex = i;
+                commentStartIndex = i;
                 break;
             }
         }
-
-        String rulePart;
-        if (commentIndex != -1) {
-            rulePart = line.substring(0, commentIndex).trim();
-            rule.comment = line.substring(commentIndex + 1).trim();
+        if (commentStartIndex != -1) {
+            rulePart = lineToParse.substring(0, commentStartIndex).trim();
+            rule.comment = lineToParse.substring(commentStartIndex + 1).trim();
         } else {
-            rulePart = line;
+            rulePart = lineToParse;
+            rule.comment = null;
         }
 
-        // 使用正则表达式匹配 UFW 状态输出的格式
-        // 尝试多种可能的格式模式
+        // 4. 预处理 rulePart: 移除末尾的 (out) 或 (in) 标记，并记录全局 (v6) 标记
+        // 这些标记通常是 ufw status 的视觉提示，不是核心规则定义
+        // 注意：移除 (out)/(in) 应该在检查 (v6) 之后，或者确保不互相干扰
+        // 顺序：先检查 (v6)，然后移除 (out)/(in)，再移除 (v6) 以便简化核心正则
+        boolean rulePartHadGlobalV6Marker = rulePart.contains("(v6)");
 
-        // 模式1: 标准的三列格式 (To Action Direction From)
-        Pattern pattern1 = Pattern.compile("^(\\S+(?:\\s+\\(v6\\))?)\\s{2,}(\\S+)\\s+(\\S+)\\s{2,}(.+?)\\s*$");
-        Matcher matcher1 = pattern1.matcher(rulePart);
+        // 移除末尾的 (out) 或 (in) 标记，这些通常是状态输出的额外提示
+        // Pattern for trailing (out) or (in) with optional surrounding spaces
+        rulePart = rulePart.replaceAll("\\s*\\((out|in)\\)\\s*$", "").trim();
+        // 处理孟加拉语或其他可能的本地化 "in" 标记（如果ufw会本地化这些）
+        // 这是一个示例，实际中可能需要更全面的本地化处理或配置ufw以英文输出
+        rulePart = rulePart.replaceAll("\\s*\\(\\s*(?:ইন| ইন)\\s*\\)\\s*$", "").trim();
 
-        // 模式2: 紧凑格式 (To ActionDirection From)
-        Pattern pattern2 = Pattern.compile("^(\\S+(?:\\s+\\(v6\\))?)\\s{2,}(\\S+)(IN|OUT)\\s{2,}(.+?)\\s*$");
-        Matcher matcher2 = pattern2.matcher(rulePart);
 
-        if (matcher1.find()) {
-            rule.to = matcher1.group(1).replace("(v6)", "").trim();
-            rule.action = matcher1.group(2);
-            rule.direction = matcher1.group(3);
-            rule.from = matcher1.group(4).replace("(v6)", "").trim();
-        } else if (matcher2.find()) {
-            rule.to = matcher2.group(1).replace("(v6)", "").trim();
-            rule.action = matcher2.group(2);
-            rule.direction = matcher2.group(3);
-            rule.from = matcher2.group(4).replace("(v6)", "").trim();
-        } else {
-            // 尝试更宽松的解析方法
-            String[] columns = splitIntoColumns(rulePart);
-            if (columns.length >= 3) {
-                rule.to = columns[0].replace("(v6)", "").trim();
+        // 创建一个清理过的规则部分，移除所有 "(v6)" 标记，以简化后续的正则匹配和列分割
+        String cleanedRulePart = rulePart.replaceAll("\\(v6\\)", "").trim();
 
-                // 处理可能合并的 Action 和 Direction
-                String actionDirection = columns[1];
-                if (actionDirection.endsWith("IN") || actionDirection.endsWith("OUT")) {
-                    rule.direction = actionDirection.substring(actionDirection.length() - 2);
-                    rule.action = actionDirection.substring(0, actionDirection.length() - 2).trim();
-                } else {
-                    // 假设第二列是 Action，第三列是 Direction
-                    rule.action = columns[1];
-                    rule.direction = columns[2];
-                }
+        // 5. 解析核心规则字段
+        boolean parsedSuccessfully = false;
+        Matcher coreMatcher = CORE_RULE_PATTERN.matcher(cleanedRulePart);
 
-                // From 是剩余的部分
-                if (columns.length > 3) {
-                    rule.from = columns[columns.length - 1].replace("(v6)", "").trim();
-                } else {
-                    rule.from = "Anywhere" + (rule.isIpv6 ? " (v6)" : "");
-                }
+        if (coreMatcher.find()) {
+            rule.to = coreMatcher.group(1).trim();
+            String actionOrActionDirection = coreMatcher.group(2).trim();
+            String explicitDirection = coreMatcher.group(3);
+            rule.from = coreMatcher.group(4).trim();
+
+            if (explicitDirection != null && !explicitDirection.trim().isEmpty()) {
+                rule.action = actionOrActionDirection;
+                rule.direction = explicitDirection.trim();
             } else {
-                // 无法解析
-                return null;
+                parseActionDirection(rule, actionOrActionDirection);
+            }
+            parsedSuccessfully = true;
+        } else {
+            Matcher threeColMatcher = THREE_COLUMN_PATTERN.matcher(cleanedRulePart);
+            if (threeColMatcher.find()) {
+                rule.to = threeColMatcher.group(1).trim();
+                parseActionDirection(rule, threeColMatcher.group(2).trim());
+                rule.from = threeColMatcher.group(3).trim();
+                parsedSuccessfully = true;
+            } else {
+                String[] columns = splitByMultipleSpaces(cleanedRulePart);
+                if (columns.length >= 3) {
+                    rule.to = columns[0];
+                    String actionCandidate = columns[1];
+                    if (columns.length >= 4) {
+                        rule.action = actionCandidate;
+                        rule.direction = columns[2];
+                        rule.from = columns[3];
+                    } else {
+                        rule.from = columns[2];
+                        parseActionDirection(rule, actionCandidate);
+                    }
+                    parsedSuccessfully = true;
+                }
             }
         }
 
-        // 检查是否为 IPv6 规则
-        // 22 (v6)                    ALLOW IN    Anywhere (v6)
-        // 8102/tcp                   ALLOW IN    2001:db8::/64              # Explicitly IPv6 rule
-        // ufw对于 source来源模糊的规则，比如Anywhere，不清晰是适用于ipv4还是ipv6，给出(v6)字样明确标识
-        // ufw对于 可以通过source来源明确的规则，比如2001:db8::/64，清晰是适用于ipv6，不给出(v6)字样
-        boolean isIpv6 = false;
-        if (line.contains("(v6)")) {
-            isIpv6 = true;
-        }else if (!rule.from.contains("Anywhere")) {
-            isIpv6 = IpUtils.isIpv6(rule.from);
-        }
-        rule.setIpv6(isIpv6);
-
-        // 标准化 Action (有时可能包含额外的空格或小写字母)
-        if (rule.action != null) {
-            rule.action = rule.action.toUpperCase().trim();
+        if (!parsedSuccessfully) {
+            System.err.println("无法解析UFW规则行: " + rawLine + " (处理后规则部分: " + cleanedRulePart + ")");
+            return null;
         }
 
-        // 标准化 Direction
+        // 6. 标准化 action 和 direction
+        if (rule.action != null) rule.action = rule.action.toUpperCase(Locale.ROOT);
         if (rule.direction != null) {
-            rule.direction = rule.direction.toUpperCase().trim();
+            rule.direction = rule.direction.toUpperCase(Locale.ROOT);
+        } else if ("LIMIT".equals(rule.action)) {
+            rule.direction = "IN";
         }
+
+        // 7. 确定是否为 IPv6 规则
+        rule.isIpv6 = rulePartHadGlobalV6Marker; // 首先检查原始规则部分是否有 (v6) 标记
+        if (!rule.isIpv6) {
+            // 检查 'From' 字段是否为明确的 IPv6 地址
+            if (rule.from != null && !isSpecialAddress(rule.from) &&
+                    IpUtils.isIpv6(stripCidr(rule.from))) {
+                rule.isIpv6 = true;
+            }
+        }
+        if (!rule.isIpv6) {
+            // 检查 'To' 字段是否为明确的 IPv6 地址 (且不是端口)
+            if (rule.to != null && !isSpecialAddress(rule.to) &&
+                    !NUMERIC_PORT_PATTERN.matcher(stripCidr(rule.to)).matches() && // 确保 'To' 不是一个端口/服务名
+                    IpUtils.isIpv6(stripCidr(rule.to))) {
+                rule.isIpv6 = true;
+            }
+        }
+
+
+        // 确保关键字段不为 null
+        if (rule.action == null || rule.action.isEmpty()) {
+            System.err.println("解析错误: Action 字段为空。原始行: " + rawLine);
+            return null;
+        }
+        if (rule.from == null || rule.from.isEmpty()) rule.from = "Anywhere";
+        if (rule.to == null || rule.to.isEmpty()) {
+            // 'To' 字段通常是端口/服务。如果为空，可能表示 'Anywhere' 或解析问题。
+            // ufw 通常不允许 'To' 为空，除非 'Action' 是 'default' (这里不处理 default 规则)
+            // 对于 ALLOW/DENY/REJECT/LIMIT，'To' 应该是端口或 'Anywhere'。
+            // 如果 'To' 字段解析为空，且不是 'default' 规则，可能需要特殊处理或标记为错误
+            // 暂时假设 'Anywhere' 如果解析为空（尽管 ufw status 通常会明确写出 'Anywhere'）
+            rule.to = "Anywhere";
+            System.err.println("警告: 'To' 字段为空，默认为 'Anywhere'。原始行: " + rawLine);
+        }
+
 
         return rule;
     }
 
-    /**
-     * 将规则行分割成列，考虑到 UFW 输出中的固定宽度列
-     */
-    private static String[] splitIntoColumns(String line) {
-        List<String> columns = new ArrayList<>();
-        StringBuilder currentColumn = new StringBuilder();
-        boolean inWhitespace = false;
-        int consecutiveSpaces = 0;
-
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-
-            if (Character.isWhitespace(c)) {
-                consecutiveSpaces++;
-                if (consecutiveSpaces >= 2 && !inWhitespace && currentColumn.length() > 0) {
-                    // 发现列分隔符 (连续两个或更多空格)
-                    columns.add(currentColumn.toString().trim());
-                    currentColumn = new StringBuilder();
-                    inWhitespace = true;
-                }
+    private static void parseActionDirection(UfwRule rule, String actionCandidate) {
+        actionCandidate = actionCandidate.trim();
+        if (actionCandidate.endsWith("IN") && actionCandidate.length() > 2 && Character.isUpperCase(actionCandidate.charAt(actionCandidate.length()-3))) {
+            rule.action = actionCandidate.substring(0, actionCandidate.length() - 2).trim();
+            rule.direction = "IN";
+        } else if (actionCandidate.endsWith("OUT") && actionCandidate.length() > 3 && Character.isUpperCase(actionCandidate.charAt(actionCandidate.length()-4))) {
+            rule.action = actionCandidate.substring(0, actionCandidate.length() - 3).trim();
+            rule.direction = "OUT";
+        } else {
+            rule.action = actionCandidate;
+            if ("LIMIT".equalsIgnoreCase(rule.action)) {
+                rule.direction = "IN";
             } else {
-                consecutiveSpaces = 0;
-                inWhitespace = false;
-                currentColumn.append(c);
+                rule.direction = null; // Direction 未知
             }
         }
+    }
 
-        // 添加最后一列
-        if (currentColumn.length() > 0) {
-            columns.add(currentColumn.toString().trim());
+    private static String[] splitByMultipleSpaces(String line) {
+        if (line == null) return new String[0];
+        return line.trim().split("\\s{2,}");
+    }
+
+    private static String stripCidr(String address) {
+        if (address == null) return null;
+        int slashIndex = address.indexOf('/');
+        if (slashIndex != -1) {
+            return address.substring(0, slashIndex);
         }
-
-        return columns.toArray(new String[0]);
+        return address;
     }
 
-    /**
-     * 将规则转换为 UFW 命令格式
-     * @return 可用于 ufw 命令的规则字符串
-     */
-    public String toUfwCommand() {
-        StringBuilder command = new StringBuilder("ufw ");
-
-        if (!enabled) {
-            command.append("--dry-run ");
-        }
-
-        command.append(action.toLowerCase()).append(" ");
-
-        if (direction.equalsIgnoreCase("IN")) {
-            command.append("from ").append(from).append(" to any port ").append(to);
-        } else if (direction.equalsIgnoreCase("OUT")) {
-            command.append("from any to ").append(from).append(" port ").append(to);
-        }
-
-        if (comment != null && !comment.isEmpty()) {
-            command.append(" comment '").append(comment).append("'");
-        }
-
-        return command.toString();
+    private static boolean isSpecialAddress(String address) {
+        if (address == null) return false;
+        String lowerAddr = address.toLowerCase(Locale.ROOT);
+        return lowerAddr.equals("anywhere") || lowerAddr.equals("any");
     }
 
-    // Getters and setters
-    public String getTo() {
-        return to;
-    }
+    // Getters (and potentially Setters)
+    public int getRuleNumber() { return ruleNumber; }
+    public String getTo() { return to; }
+    public String getAction() { return action; }
+    public String getDirection() { return direction; }
+    public String getFrom() { return from; }
+    public String getComment() { return comment; }
+    public boolean isIpv6() { return isIpv6; }
+    public boolean isEnabled() { return enabled; }
 
-    public void setTo(String to) {
-        this.to = to;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public void setAction(String action) {
-        this.action = action;
-    }
-
-    public String getDirection() {
-        return direction;
-    }
-
-    public void setDirection(String direction) {
-        this.direction = direction;
-    }
-
-    public String getFrom() {
-        return from;
-    }
-
-    public void setFrom(String from) {
-        this.from = from;
-    }
-
-    public String getComment() {
-        return comment;
-    }
-
-    public void setComment(String comment) {
-        this.comment = comment;
-    }
-
-    public boolean isIpv6() {
-        return isIpv6;
-    }
-
-    public void setIpv6(boolean ipv6) {
-        isIpv6 = ipv6;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
+    // Key for comparing core functional equivalence (cleaned port, action, cleaned source)
+    public String getCoreEquivalenceKey() {
+        return (this.to == null ? "null" : this.to) + "#" +
+                (this.action == null ? "null" : this.action) + "#" +
+                (this.from == null ? "null" : this.from);
     }
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
+        return "UfwRule{" +
+                "ruleNumber=" + ruleNumber +
+                ", to='" + to + '\'' +
+                ", action='" + action + '\'' +
+                ", direction='" + direction + '\'' +
+                ", from='" + from + '\'' +
+                (comment != null ? ", comment='" + comment + '\'' : "") +
+                ", isIpv6=" + isIpv6 +
+                ", enabled=" + enabled +
+                '}';
+    }
 
-        if (!enabled) {
-            sb.append("[DISABLED] ");
-        }
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UfwRule ufwRule = (UfwRule) o;
+        return ruleNumber == ufwRule.ruleNumber &&
+                isIpv6 == ufwRule.isIpv6 &&
+                enabled == ufwRule.enabled &&
+                Objects.equals(to, ufwRule.to) &&
+                Objects.equals(action, ufwRule.action) &&
+                Objects.equals(direction, ufwRule.direction) &&
+                Objects.equals(from, ufwRule.from) &&
+                Objects.equals(comment, ufwRule.comment);
+    }
 
-        sb.append(to);
-        if (isIpv6) {
-            sb.append(" (v6)");
-        }
-        sb.append("\t");
-
-        sb.append(action).append(" ").append(direction).append("\t");
-        sb.append(from);
-        if (isIpv6 && from.equals("Anywhere")) {
-            sb.append(" (v6)");
-        }
-
-        if (comment != null && !comment.isEmpty()) {
-            sb.append("\t# ").append(comment);
-        }
-
-        return sb.toString();
+    @Override
+    public int hashCode() {
+        return Objects.hash(ruleNumber, to, action, direction, from, comment, isIpv6, enabled);
     }
 }

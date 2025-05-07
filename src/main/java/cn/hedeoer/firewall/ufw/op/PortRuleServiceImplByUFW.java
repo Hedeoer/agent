@@ -6,6 +6,7 @@ import cn.hedeoer.common.entity.SourceRule;
 import cn.hedeoer.firewall.PortRuleService;
 import cn.hedeoer.firewall.firewalld.exception.FirewallException;
 import cn.hedeoer.firewall.ufw.UfwRule;
+import cn.hedeoer.firewall.ufw.UfwRuleConverterWithYourParser;
 import cn.hedeoer.firewall.ufw.UfwStatus;
 import cn.hedeoer.util.*;
 import org.slf4j.Logger;
@@ -22,6 +23,13 @@ import java.util.concurrent.TimeoutException;
 
 public class PortRuleServiceImplByUFW implements PortRuleService {
     private static final Logger logger = LoggerFactory.getLogger(PortRuleServiceImplByUFW.class);
+
+    /**
+     * 构造方法，初始化时将ufw规则转换为详细格式供后续使用
+     */
+    public PortRuleServiceImplByUFW(){
+        covertUfwRuleToDetailStyle();
+    }
 
     /**
      * 查询ufw管理的所有端口规则，由于ufw中没有zone的概念，默认传入的zone值为public
@@ -45,15 +53,22 @@ public class PortRuleServiceImplByUFW implements PortRuleService {
         // 设置超时时间（秒）
         int timeoutSeconds = 10;
         try {
-            ProcessResult parseResult = new ProcessExecutor()
+            ProcessResult parseResult1 = new ProcessExecutor()
                     .command("sudo", "ufw", "status", "verbose")
                     .readOutput(true)
                     .timeout(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
                     .exitValueNormal() // 确保进程正常退出
                     .execute();
-            String processOut = parseResult.outputUTF8();
+            ProcessResult parseResult2 = new ProcessExecutor()
+                    .command("sudo", "ufw", "status", "numbered")
+                    .readOutput(true)
+                    .timeout(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
+                    .exitValueNormal() // 确保进程正常退出
+                    .execute();
+            String processOut = parseResult1.outputUTF8();
+            String numberStr = parseResult2.outputUTF8();
 
-            UfwStatus ufwStatus = UfwStatus.parse(processOut);
+            UfwStatus ufwStatus = UfwStatus.parse(processOut,numberStr);
 
             // 封装为List<PortRule>对象
             result = toPortRules(ufwStatus);
@@ -118,7 +133,7 @@ public class PortRuleServiceImplByUFW implements PortRuleService {
             // 节点唯一标识
             String agentId = AgentIdUtil.loadOrCreateUUID();
 
-            // ip类型，通过端口来判断 或者 通过解析ufw status verbose中是否包含 v6字样
+            // 适用ip协议族类型，首先原始规则部分是否有 (v6) 标记，再检查 '源地址' 字段 和 '目标地址' 是否为明确的 IPv6 地址
             String family = rule.isIpv6() ? "ipv6" : "ipv4";
 
             // 端口 ufw中端口有两种类型（单端口 3453）（区间端口4000:500,统一风格为 4000-500）
@@ -298,6 +313,8 @@ public class PortRuleServiceImplByUFW implements PortRuleService {
                                 // sudo ufw delete allow proto tcp from 192.168.1.0/24 to any port 3000:3100
                                 // 增加delete关键字，移除规则注释
                                 // todo 端口删除方案需要优化？使用编号删除还是 使用原来命令删除？
+                                // sudo ufw allow 22/tcp
+                                //sudo ufw allow 22/udp
                                 String originalRuleOP = policy ? "allow" : "reject";
                                 command = String.format("sudo ufw delete %s proto %s from %s to any port %s", originalRuleOP, currentProtocol, currentSourceIp, currentPort);
                             }
@@ -361,4 +378,27 @@ public class PortRuleServiceImplByUFW implements PortRuleService {
     public Boolean updateOnePortRule(String zoneName, PortRule oldPortRule, PortRule newPortRule) throws FirewallException {
         return null;
     }
+
+
+
+    /**
+     * 将通用的 UFW "IN" 方向规则（例如 "22 ALLOW IN Anywhere # SSH"）
+     * 转换为更具体的 TCP 和 UDP 规则，并保留原始注释。
+     * 此方法会从规则号最大的规则开始处理，以正确处理动态变化的规则序号。
+     *
+     * @throws IOException          如果命令执行期间发生 I/O 错误。
+     * @throws InterruptedException 如果当前线程在等待命令完成时被中断。
+     * @throws TimeoutException     如果命令执行超时。
+     */
+    public static Boolean covertUfwRuleToDetailStyle(){
+
+        try {
+            UfwRuleConverterWithYourParser.covertUfwRuleToDetailStyle();
+        } catch (IOException | InterruptedException | TimeoutException e) {
+            throw new RuntimeException(e);
+        }
+
+        return true;
+    }
+
 }
