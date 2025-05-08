@@ -66,10 +66,10 @@ public class FirewallOpAdapter implements Runnable {
 
         // 获取agent节点的唯一标识
         String agentId = AgentIdUtil.loadOrCreateUUID();
-        String subStreamKey = "sub:" + agentId;
+        String subStreamKey = "sub:" + agentId + ":" + "portRule";
         String groupName = "firewall_" + subStreamKey + "_group";
         String consumerName = groupName + "_consumer";
-        String pubStreamKey = "pub:" + agentId;
+        String pubStreamKey = "pub:" + agentId + ":" + "portRule";
 
 //            SimpleStreamConsumer simpleStreamConsumer = new SimpleStreamConsumer(jedis, subStreamKey);
 
