@@ -252,7 +252,7 @@ public class FirewallOpAdapter implements Runnable {
         //  1.  发布消息时如何指定 entryID 完成，
         //  2. agent向master注册时需要设计agent_Id的生成规则 完成，
         //  3. master的对于agent响应的数据是否需要持久化，需要，比如请求全部的端口规则
-        //  todo 4. master获取 agentId:pub 流数据逻辑 master发布命令后去读取指定的steam即可获取 响应，可以考虑重复读取减少网络波动影响
+        //  master获取 agentId:pub 流数据逻辑 master发布命令后去读取指定的steam即可获取 响应，可以考虑重复读取减少网络波动影响
         //  5. 多参数查询需要支持 isUsing 和policy 完成
         StreamProducer producer = new StreamProducer(jedis, streamKey);
         // 转化为map

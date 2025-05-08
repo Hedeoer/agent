@@ -1,17 +1,16 @@
 package cn.hedeoer.firewall.ufw.op;
 
+import cn.hedeoer.firewall.ufw.UfwRuleConverterWithYourParser;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
-import static org.junit.Assert.*;
-
 public class PortRuleServiceImplByUFWTest {
 
     @Test
     public void covertUfwRuleToDetailStyle() throws IOException, InterruptedException, TimeoutException {
-        PortRuleServiceImplByUFW.covertUfwRuleToDetailStyle();
+        UfwRuleConverterWithYourParser.covertUfwRuleToDetailStyle();
         //sudo ufw delete 3 --force
         //sudo ufw delete 4 --force
         //sudo ufw delete 6 --force

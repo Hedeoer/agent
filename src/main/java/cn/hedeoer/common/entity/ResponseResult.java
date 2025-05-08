@@ -122,7 +122,6 @@ public class ResponseResult<T> {
             if (data instanceof Collection) {
                 ObjectMapper objectMapper = new ObjectMapper();
                 try {
-                    // todo use jackson to covert collector
                     dataStr = objectMapper.writeValueAsString(data);
                 } catch (JsonProcessingException e) {
                     throw new RuntimeException(e);

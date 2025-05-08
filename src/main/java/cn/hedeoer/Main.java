@@ -5,6 +5,7 @@ import cn.hedeoer.schedule.PortInfoReport;
 import cn.hedeoer.subscribe.streamadapter.FirewallOpAdapter;
 import cn.hedeoer.subscribe.streamadapter.FirewallStatusInfoAdapter;
 import cn.hedeoer.subscribe.streamadapter.PortInfoAdapter;
+import cn.hedeoer.util.InitUtil;
 import cn.hedeoer.util.ThreadPoolUtil;
 
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -37,6 +38,8 @@ public class Main {
         FirewallOpAdapter adapter = new FirewallOpAdapter();
         commonPool.execute(adapter);
 */
+        // 0. 所有的初始化工作
+        InitUtil.init();
 
 
         // 1. 创建独立的定时任务线程池处理心跳

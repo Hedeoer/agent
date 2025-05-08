@@ -74,7 +74,7 @@ public class IpUtils {
      * @return 如果是有效的IP地址则返回true，否则返回false
      */
     public static boolean isValidIp(String ip) {
-        return isIpv4(ip) || isIpv6(ip);
+        return isIpv4(ip) || isIpv6(ip) || isValidCidr(ip);
     }
     
     /**

@@ -35,7 +35,7 @@ public class UfwRuleTest {
                 "[12] 3000:3100/tcp              ALLOW IN    Anywhere (v6)",
                 "[13] 22 (v6)                    ALLOW IN    Anywhere (v6)", // To has v6, From has v6
                 "[14] 22/tcp                     ALLOW IN    Anywhere ( ইন )", // 测试孟加拉语 (in)
-                "[15] 5000                       ALLOW IN    Anywhere (out)             # Misplaced (out) but testing robustness",
+                "[15] 5000                       ALLOW IN    Anywhere (out)             Misplaced (out) but testing robustness",
                 "[16] 9000                       ALLOWIN     Anywhere                   # Combined ActionDirection",
                 "[17] 8103                       ALLOW IN    2001:db8::/64              # Allow TCP traffic from IPv6 network to web ports8101",
                 "Default: deny (incoming), allow (outgoing), disabled (routed)" // Should be skipped
