@@ -344,45 +344,75 @@ public class PingControlUtil {
     }
 
     /**
-     * 检查是否有管理员权限（root或sudo）
+     * 检查当前执行程序的用户是否拥有无密码的、完全的 root 权限。
+     * <p>
+     * "无密码的、完全的 root 权限" 指的是以下两种情况之一：
+     * 1. 程序本身就是以 root 用户身份运行。
+     * 2. 程序以普通用户身份运行，但该用户在 sudoers 配置中拥有类似
+     *    `(ALL) NOPASSWD: ALL` 或 `(ALL : ALL) NOPASSWD: ALL` 的权限。
+     * </p>
      *
-     * @return 是否有管理员权限
+     * @return 如果用户拥有无密码的、完全的 root 权限则返回true，否则返回false。
      */
     public static boolean hasAdminPrivileges() {
-        // 首先检查是否为root用户
+        // 1. 检查是否本身就是 root 用户
         if (isRoot()) {
+            logger.info("Current user is root.");
             return true;
         }
+        logger.info("Current user is not root. Checking for passwordless sudo privileges...");
 
-        // 然后检查是否有sudo权限执行sysctl命令
+        // 2. 检查 sudo -l 的输出，寻找 NOPASSWD: ALL 模式
         try {
-            ProcessResult result = new ProcessExecutor()
-                    .command("sudo", "-n", "sysctl", "-n", "kernel.hostname")
+            ProcessResult sudoLResult = new ProcessExecutor()
+                    .command("sudo", "-nl") // 使用 -n 确保如果需要密码则立即失败，-l 列出权限
+                    // 注意：`sudo -nl` 可能会先尝试一个需要root权限的测试命令，如果失败则回退到只列出权限
+                    // 对于拥有 NOPASSWD: ALL 的用户，`sudo -nl` 应该能成功并列出权限。
+                    // 如果用户没有 NOPASSWD: ALL，但有其他 sudo 权限（需要密码），
+                    // `sudo -nl` 可能会因为 `-n` 而失败，退出码非0。
+                    // 如果用户没有任何 sudo 权限，`sudo -l` (或 `-nl`) 也可能失败。
                     .readOutput(true)
-                    .exitValues(0, 1)  // 允许退出码0和1
-                    .timeout(5, TimeUnit.SECONDS)
+                    .redirectErrorStream(true) // 将错误流也捕获到输出中，方便调试
+                    .timeout(10, TimeUnit.SECONDS) // sudo -l 可能涉及网络查找或复杂解析
                     .execute();
 
-            return result.getExitValue() == 0;
-        } catch (Exception e) {
-            logger.debug("User does not have passwordless sudo access: " + e.getMessage());
+            int exitCode = sudoLResult.getExitValue();
+            String output = sudoLResult.outputUTF8();
+            logger.debug("sudo -nl execution result - Exit Code: {}, Output:\n{}", exitCode, output);
 
-            // 尝试检查用户是否在sudoers列表中
-            try {
-                ProcessResult result = new ProcessExecutor()
-                        .command("sudo", "-l")
-                        .readOutput(true)
-                        .exitValues(0, 1)
-                        .timeout(5, TimeUnit.SECONDS)
-                        .execute();
+            // 如果 `sudo -nl` 成功（通常退出码为0，但对于某些配置或情况，它可能在显示权限前就因-n而退出）
+            // 我们更关注输出内容是否表明了 NOPASSWD: ALL
+            // 对于 `(ALL) NOPASSWD: ALL` 的用户，`sudo -nl` 通常会成功列出权限，退出码为0。
+            // 如果用户有sudo权限但需要密码，`sudo -nl` 退出码通常为1。
+            // 如果用户完全没有sudo权限，`sudo -nl` 退出码也通常为1。
 
-                String output = result.outputUTF8();
-                return result.getExitValue() == 0 &&
-                        (output.contains("(ALL)") || output.contains("sysctl"));
-            } catch (Exception ex) {
-                logger.error("Error checking sudo privileges: " + ex.getMessage(), ex);
+            if (exitCode == 0) { // `sudo -nl` 成功执行并列出了权限
+                String[] lines = output.split("\\r?\\n");
+                for (String line : lines) {
+                    String trimmedLine = line.trim();
+                    // 检查明确的 (ALL) NOPASSWD: ALL 或 (ALL : ALL) NOPASSWD: ALL 模式
+                    // 正则表达式会更健壮，但这里用简化的startsWith和endsWith以及包含检查
+                    // 模式1: (ALL) NOPASSWD: ALL
+                    // 模式2: (ALL : ALL) NOPASSWD: ALL (或类似，允许中间有空格)
+                    if (trimmedLine.matches("^\\s*\\(ALL\\s*(:\\s*ALL\\s*)?\\)\\s*NOPASSWD:\\s*ALL.*")) {
+                        logger.info("Found passwordless full root access in 'sudo -nl' output: \"{}\"", trimmedLine);
+                        return true;
+                    }
+                }
+                logger.info("'sudo -nl' executed successfully, but no 'NOPASSWD: ALL' pattern found for all commands.");
+                return false; // sudo -nl 成功，但没找到期望的无密码完全权限模式
+            } else {
+                // sudo -nl 执行失败 (exitCode != 0)，通常意味着用户没有 sudo 权限，
+                // 或者有 sudo 权限但需要密码（因为 -n 选项）。
+                // 这两种情况都不符合“无密码的、完全的 root 权限”。
+                logger.info("'sudo -nl' command failed or indicated password requirement. Exit code: {}. Not considered passwordless full root.", exitCode);
                 return false;
             }
+
+        } catch (Exception e) {
+            // 捕获执行 sudo -nl 过程中可能发生的任何异常（超时、命令不存在等）
+            logger.error("Error executing or parsing 'sudo -nl' to check privileges: " + e.getMessage(), e);
+            return false;
         }
     }
 }
