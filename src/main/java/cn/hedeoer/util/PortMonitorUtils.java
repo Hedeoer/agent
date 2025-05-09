@@ -271,13 +271,13 @@ public class PortMonitorUtils {
     }
 
     /**
-     * 获取机器上 1024-65535 范围内当前被使用的端口号列表
+     * 获取机器上 22-65535 范围内当前被使用的端口号列表
      *
      * @return 返回被使用的端口号列表，如果没有端口被使用则返回空列表
      */
-    public static List<PortInfo> getUsedPortsAbove1024() {
+    public static List<PortInfo> getUsedPortsAbove22() {
         // 使用现有的 getPortsUsage 方法获取端口信息
-        return getPortsUsage("1024", "65535");
+        return getPortsUsage("22", "65535");
     }
 
 

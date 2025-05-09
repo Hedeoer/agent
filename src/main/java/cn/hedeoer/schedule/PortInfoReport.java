@@ -51,7 +51,7 @@ public class PortInfoReport implements Runnable{
             String agentId = AgentIdUtil.loadOrCreateUUID();
 
             // 获取 快速查出 1024-65535 端口范围 内目前被使用的端口号情况
-            List<PortInfo> currentPortInfos = PortMonitorUtils.getUsedPortsAbove1024();
+            List<PortInfo> currentPortInfos = PortMonitorUtils.getUsedPortsAbove22();
 
             // 和上次比较是否有端口使用情况发生变化？
             Boolean hasChange = hasPortChanges(lastPortInfos,currentPortInfos);

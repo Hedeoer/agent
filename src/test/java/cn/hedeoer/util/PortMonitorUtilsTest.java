@@ -40,4 +40,10 @@ public class PortMonitorUtilsTest {
         System.out.println(PortMonitorUtils.getPortsInUse("","tcp"));
         System.out.println(PortMonitorUtils.getPortsInUse("22","tcp"));
     }
+
+    @Test
+    public void getUsedPortsAbove1024() {
+        List<PortInfo> list = PortMonitorUtils.getUsedPortsAbove22();
+        list.stream().filter(l -> l.getPortNumber() == 22).forEach(System.out::println);
+    }
 }
