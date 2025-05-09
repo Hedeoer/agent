@@ -35,4 +35,9 @@ public class WallUtilTest {
     public void firewallStatusTest(){
         System.out.println(WallUtil.getFirewallStatusInfo());
     }
+
+    @Test
+    public void getFirewallZones() {
+        System.out.println(WallUtil.getFirewallZones());
+    }
 }
