@@ -4,10 +4,7 @@ import cn.hedeoer.common.enmu.FireWallStatus;
 import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.common.enmu.FirewallOperationType;
 import cn.hedeoer.firewall.firewalld.exception.FirewallException;
-import cn.hedeoer.firewall.firewalld.op.FirewallDRuleQuery;
 import cn.hedeoer.pojo.FirewallStatusInfo;
-import org.freedesktop.dbus.connections.impl.DBusConnection;
-import org.freedesktop.dbus.exceptions.DBusException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeroturnaround.exec.ProcessExecutor;
@@ -17,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -98,6 +96,7 @@ public class WallUtil {
      * 获取防火墙可用的区域(zone)名称列表
      *
      * 该方法会自动检测系统中启用的防火墙工具(firewalld/ufw)，并获取对应的zone列表：
+     * 0. ufw中没有区域的概念
      * 1. 如果系统未启用任何防火墙工具，返回空列表
      * 2. 如果同时启用了多个防火墙工具，优先使用firewalld
      * 3. 对于firewalld，通过DBus接口获取所有可用的zones
@@ -124,26 +123,7 @@ public class WallUtil {
 
         // 如果启用的防火墙工具为firewalld
         if (FireWallType.FIREWALLD.equals(willUseFireWallType)) {
-            try {
-                // 获取DBus连接
-                DBusConnection connection = FirewallDRuleQuery.getDBusConnection();
-
-                // 获取zone接口
-                FirewallDRuleQuery.FirewallDZoneInterface zoneInterface = connection.getRemoteObject(
-                        FIREWALLD_BUS_NAME,
-                        FIREWALLD_PATH,
-                        FirewallDRuleQuery.FirewallDZoneInterface.class);
-
-                // 获取所有zones
-                String[] zones = zoneInterface.getZones();
-                return zones != null ? Arrays.asList(zones) : new ArrayList<String>();
-            } catch (DBusException e) {
-                try {
-                    throw new FirewallException("Failed to get zone names: " + e.getMessage(), e);
-                } catch (FirewallException ex) {
-                    throw new RuntimeException(ex);
-                }
-            }
+            return getFirewallZones();
         }
 
         return zoneNames;
@@ -461,6 +441,62 @@ public class WallUtil {
         }
 
         return false;
+    }
+
+    /**
+     * 执行 sudo firewall-cmd --get-zones 命令并返回防火墙区域列表。
+     * <p>
+     * 注意：此方法依赖于当前用户拥有执行 `sudo firewall-cmd` 的权限，
+     * 并且可能需要配置 sudoers 文件以允许无密码执行此特定命令，
+     * 否则执行可能会失败或阻塞等待密码输入。
+     * </p>
+     *
+     * @return 防火墙区域的列表。如果命令执行失败或没有输出，则返回空列表。
+     *         每个区域名是一个字符串。
+     */
+    public static List<String> getFirewallZones() {
+        try {
+            // 构建命令
+            ProcessExecutor executor = new ProcessExecutor()
+                    .command("sudo", "firewall-cmd", "--get-zones")
+                    .readOutput(true) // 我们需要读取命令的输出
+                    .redirectErrorStream(true); // 将错误流重定向到输出流，方便一起处理或记录
+
+
+            // 执行命令并获取结果 (可以设置超时)
+            ProcessResult processResult = executor.execute();
+
+
+            int exitCode = processResult.getExitValue();
+            String output = processResult.outputUTF8(); // 假设输出是 UTF-8 编码
+
+            logger.info("Command executed with exit code: {}", exitCode);
+            logger.debug("Command output:\n{}", output);
+
+            if (exitCode == 0 && output != null && !output.trim().isEmpty()) {
+                // firewall-cmd --get-zones 的输出是空格分隔的区域名列表
+                // 例如："public work home internal"
+                String[] zonesArray = output.trim().split("\\s+");
+                return Arrays.asList(zonesArray);
+            } else {
+                logger.error("Failed to execute 'sudo firewall-cmd --get-zones'. Exit code: {}, Output: {}", exitCode, output);
+                return Collections.emptyList();
+            }
+
+        } catch (IOException e) {
+            logger.error("IOException while executing command: {}", e.getMessage(), e);
+            return Collections.emptyList();
+        } catch (InterruptedException e) {
+            logger.error("Command execution interrupted: {}", e.getMessage(), e);
+            Thread.currentThread().interrupt(); // 重置中断状态
+            return Collections.emptyList();
+        } catch (TimeoutException e) {
+            logger.error("Command execution timed out: {}", e.getMessage(), e);
+            return Collections.emptyList();
+        } catch (Exception e) { // 捕获其他可能的运行时异常
+            logger.error("An unexpected error occurred while executing command: {}", e.getMessage(), e);
+            return Collections.emptyList();
+        }
     }
 
 

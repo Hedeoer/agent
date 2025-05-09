@@ -1,5 +1,6 @@
 package cn.hedeoer.util;
 
+import cn.hedeoer.common.enmu.FirewallOperationType;
 import org.junit.Test;
 
 import java.util.List;
@@ -33,5 +34,10 @@ public class WallUtilTest {
     @Test
     public void firewallStatusTest(){
         System.out.println(WallUtil.getFirewallStatusInfo());
+    }
+
+    @Test
+    public void getFirewallZones() {
+        System.out.println(WallUtil.getFirewallZones());
     }
 }

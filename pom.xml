@@ -59,38 +59,6 @@
             <version>0.1.55</version>
         </dependency>
 
-        <!--使用dbus api操作firewall, java 最低版本要求11-->
-        <dependency>
-            <groupId>com.github.hypfvieh</groupId>
-            <artifactId>dbus-java-core</artifactId>
-            <version>4.3.2</version>
-            <exclusions>
-                <!-- 排除 slf4j-api 依赖 -->
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-api</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Linux UnixSocket传输 -->
-        <!-- https://mvnrepository.com/artifact/com.github.hypfvieh/dbus-java-transport-junixsocket -->
-        <dependency>
-            <groupId>com.github.hypfvieh</groupId>
-            <artifactId>dbus-java-transport-junixsocket</artifactId>
-            <version>4.3.2</version>
-            <exclusions>
-                <!-- 排除 slf4j-api 依赖 -->
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-api</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.github.hypfvieh</groupId>
-                    <artifactId>dbus-java-core</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
         <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
         <!--lombok-->
         <dependency>

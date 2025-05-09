@@ -24,10 +24,16 @@ public class PortInfoReport implements Runnable{
     // 使用 CopyOnWriteArrayList 保存上一次端口信息
     private final List<PortInfo> lastPortInfos = new CopyOnWriteArrayList<>();
 
-    public  PortInfoReport(){}
+    private String  portInfoHashTableName ;
+
+    public  PortInfoReport(){
+        this.portInfoHashTableName = "firewall:portInfo";
+
+    }
 
     public  PortInfoReport(Integer heartBeatGap){
         this.heartBeatGap = heartBeatGap;
+        this.portInfoHashTableName = "firewall:portInfo";
     }
 
 
@@ -50,7 +56,7 @@ public class PortInfoReport implements Runnable{
             // 和上次比较是否有端口使用情况发生变化？
             Boolean hasChange = hasPortChanges(lastPortInfos,currentPortInfos);
 
-            String portInfoHashTableName = "firewall:portInfo";
+
             String redisServerSecondsTime = RedisUtil.getRedisServerTime();
 
             ObjectNode jsonNode = objectMapper.createObjectNode();
