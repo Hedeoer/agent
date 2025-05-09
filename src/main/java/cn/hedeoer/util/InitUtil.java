@@ -16,6 +16,12 @@ public class InitUtil {
 
         Boolean result = true;
 
+        // 系统用户权限
+        if (!PingControlUtil.hasAdminPrivileges()) {
+            System.exit(1);
+
+        }
+
         //判读防火墙工具类型
         //执行对应的初始化工作
         FireWallType firewallType = WallUtil.getFirewallType();
