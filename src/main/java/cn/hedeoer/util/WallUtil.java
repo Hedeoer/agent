@@ -375,7 +375,7 @@ public class WallUtil {
                     case START:
                         command = "sudo ufw enable";
                         // UFW 可能会要求交互确认，添加 --force 参数避免交互
-                        command = "echo y | " + command + " --force";
+//                        command = "echo y | " + command + " --force";
                         break;
                     case STOP:
                         command = "sudo ufw disable";
@@ -383,7 +383,7 @@ public class WallUtil {
                     case RESTART:
                         command = "sudo ufw disable && sudo ufw enable";
                         // UFW 可能会要求交互确认，添加 --force 参数避免交互
-                        command = "echo y | " + command + " --force";
+//                        command = "echo y | " + command + " --force";
                         break;
                     default:
                         return false;
