@@ -1,5 +1,6 @@
 package cn.hedeoer.util;
 
+import cn.hedeoer.common.enmu.FirewallOperationType;
 import org.junit.Test;
 
 import java.util.List;
