@@ -230,7 +230,7 @@ public class WallUtil {
     public static String getFirewallVersion(FireWallType type) {
         try {
             if (type == FireWallType.FIREWALLD) {
-                return execGetLine("firewall-cmd", "--version");
+                return execGetLine("sudo","firewall-cmd", "--version");
             }
             if (type == FireWallType.UFW) {
                 // ufw version | grep -i ufw | awk '{print $2;}'

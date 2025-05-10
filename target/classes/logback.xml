@@ -68,7 +68,7 @@
     <logger name="org.quartz" level="WARN"/>
 
     <!-- 应用日志配置 - 修改为您的包名 -->
-    <logger name="com.yourcompany" level="INFO"/>
+    <logger name="cn.hedeoer" level="INFO"/>
 
     <!-- 根日志级别 -->
     <root level="INFO">

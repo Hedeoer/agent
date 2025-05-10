@@ -2,6 +2,7 @@ package cn.hedeoer.util;
 
 import cn.hedeoer.common.enmu.FireWallType;
 import cn.hedeoer.firewall.ufw.UfwRuleConverterWithYourParser;
+import cn.hedeoer.ssh.SimpleSshServerWithPublicKeyAuth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +21,14 @@ public class InitUtil {
         if (!PingControlUtil.hasAdminPrivileges()) {
             System.exit(1);
 
+        }
+
+        // 启动apache mina sshd服务端
+        Integer defaultSshServerPort = 2222;
+        String needCheckPublicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFnqcDG0yPisMvC9ehfSkzzrHa80n7YPAe6xv3bQMiDC H@DESKTOP-1AO4P84";
+        SimpleSshServerWithPublicKeyAuth sshServer = new SimpleSshServerWithPublicKeyAuth(2222,needCheckPublicKey);
+        if (!sshServer.startSshServer()) {
+            System.exit(1);
         }
 
         //判读防火墙工具类型
