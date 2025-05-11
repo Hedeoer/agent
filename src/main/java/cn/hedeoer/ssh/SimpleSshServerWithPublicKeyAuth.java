@@ -20,6 +20,9 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * ssh 服务器的启动和授权
+ */
 public class SimpleSshServerWithPublicKeyAuth {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleSshServerWithPublicKeyAuth.class);

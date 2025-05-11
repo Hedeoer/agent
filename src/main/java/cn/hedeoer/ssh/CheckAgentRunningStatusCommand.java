@@ -1,5 +1,6 @@
 package cn.hedeoer.ssh;
 
+import cn.hedeoer.schedule.HeartBeat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.sshd.common.FactoryManager;
@@ -16,6 +17,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * 响应检查ssh服务器的状态的get_ssh_server_status命令
+ */
 public class CheckAgentRunningStatusCommand extends AbstractCommandSupport {
     private static final Logger log = LoggerFactory.getLogger(CheckAgentRunningStatusCommand.class); // 使用规范的 log 变量名
 

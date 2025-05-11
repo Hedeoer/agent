@@ -1,5 +1,6 @@
 package cn.hedeoer.ssh;
 
+import cn.hedeoer.schedule.HeartBeat;
 import org.apache.sshd.server.channel.ChannelSession;
 import org.apache.sshd.server.command.Command;
 import org.apache.sshd.server.command.CommandFactory;
@@ -8,6 +9,9 @@ import org.apache.sshd.server.shell.ShellFactory;
 
 import java.io.IOException;
 
+/**
+ * ssh命令执行匹配，按照ssh命令特征执行对应的命令
+ */
 public class SelfProcessShellCommandFactory implements CommandFactory {
     @Override
     public Command createCommand(ChannelSession channel, String command) throws IOException {
@@ -19,7 +23,11 @@ public class SelfProcessShellCommandFactory implements CommandFactory {
 
         switch (commandName) {
             case "get_ssh_server_status":
-                return new CheckAgentRunningStatusCommand(command);
+                CheckAgentRunningStatusCommand checkAgentRunningStatusCommand = new CheckAgentRunningStatusCommand(command);
+                // agent节点发送一次心跳
+                boolean sendHearBeat = new HeartBeat().sendHearBeat();
+
+                return checkAgentRunningStatusCommand;
 
             default:
                 ShellFactory factory = new ProcessShellFactory(command, CommandFactory.split(command));
