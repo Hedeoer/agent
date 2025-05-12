@@ -1,0 +1,95 @@
+# Redis 连接与连接池配置
+# ========================
+
+# redis: 是所有Redis相关配置的根键
+redis:
+  # --- Redis 服务器连接参数 ---
+
+  # host: Redis 服务器的主机名或 IP 地址。
+  # 例如: "localhost", "192.168.1.100", "your-redis-dns-name"
+  # 【必需】
+  host: "hedeoer.ggff.net"
+
+  # port: Redis 服务器监听的端口号。
+  # 默认通常是 6379。
+  # 【必需】
+  port: 6379
+
+  # timeout: 连接超时和读写操作的超时时间，单位是毫秒。
+  # 如果不配置，Jedis 客户端通常有其默认值 (例如 Protocol.DEFAULT_TIMEOUT，通常是 2000 毫秒)。
+  # 【可选】
+  timeout: 120000
+
+  # password: 连接 Redis 服务器所需的密码。
+  # 如果 Redis 服务器没有设置密码，则将此项留空、注释掉，或显式设置为 null (例如 password: null)。
+  # 注意：如果密码包含特殊字符，建议使用引号包围，例如 password: "my#P@sswOrd"。
+  # 【可选】
+  password: hedeoer123  # 如果有密码，请填写，例如: "yourStrongPassword"
+
+  # database: 要连接的 Redis 数据库索引号。
+  # Redis 支持多个数据库，默认是数据库 0。有效范围通常是 0 到 15 (取决于服务器配置)。
+  # 如果不配置，Jedis 客户端通常默认连接数据库 0。
+  # 【可选】
+  database: 0
+
+  #是否使用ssl连接，默认使用JVM 默认信任库，比如  JVM 默认信任 Let's Encrypt
+  ssl: true
+
+
+  # --- Jedis 连接池 (JedisPool) 配置参数 ---
+  # pool: 是所有 JedisPoolConfig 相关设置的父键。
+  # 如果省略整个 'pool' 部分，JedisPoolConfig 将使用其内部的默认值。
+  # 【可选】
+  pool:
+    # maxTotal: 连接池中能够容纳的最大连接数。
+    # 如果设置为 -1，则表示不限制（不推荐）。
+    # 【可选，JedisPoolConfig 默认值通常是 8】
+    maxTotal: 100
+
+    # maxIdle: 连接池中允许的最大空闲连接数。
+    # 超过此数量的空闲连接可能会被释放。
+    # 【可选，JedisPoolConfig 默认值通常是 8】
+    maxIdle: 20
+
+    # minIdle: 连接池中保持的最小空闲连接数。
+    # 连接池会尽量确保至少有这么多空闲连接。
+    # 【可选，JedisPoolConfig 默认值通常是 0】
+    minIdle: 5
+
+    # maxWaitMillis: 当连接池中的连接耗尽时，客户端获取连接的最大等待时间（单位毫秒）。
+    # 如果超过此时间仍未获取到连接，则会抛出 JedisExhaustedPoolException (或类似异常)。
+    # 设置为 -1 表示无限等待（不推荐）。
+    # 【可选，JedisPoolConfig 默认值通常是 -1，即无限等待】
+    maxWaitMillis: 5000
+
+    # testOnBorrow: 在从连接池获取连接时，是否进行有效性检查（例如发送 PING 命令）。
+    # 设置为 true 可以确保获取到的连接是可用的，但会带来一定的性能开销。
+    # 【可选，JedisPoolConfig 默认值通常是 false】
+    testOnBorrow: true
+
+    # testOnReturn: 在将连接归还到连接池时，是否进行有效性检查。
+    # 【可选，JedisPoolConfig 默认值通常是 false】
+    testOnReturn: false
+
+    # testWhileIdle: 当连接处于空闲状态时，是否定期进行有效性检查。
+    # 这个检查通常由空闲连接驱逐线程 (evictor) 执行。
+    # 【可选，JedisPoolConfig 默认值通常是 false】
+    testWhileIdle: true
+
+    # timeBetweenEvictionRunsMillis: 空闲连接驱逐线程的运行间隔时间（单位毫秒）。
+    # 如果设置为一个正数，则会启动一个后台线程定期检查和驱逐空闲连接。
+    # 设置为 -1 表示不运行空闲连接驱逐线程。
+    # 【可选，JedisPoolConfig 默认值通常是 -1】
+    timeBetweenEvictionRunsMillis: 30000 # 例如，每30秒运行一次
+
+    # minEvictableIdleTimeMillis: 连接在池中保持空闲而不被驱逐的最小时间（单位毫秒）。
+    # 只有当连接的空闲时间超过此值，并且当前连接数大于 minIdle 时，才可能被驱逐。
+    # 此设置只有在 timeBetweenEvictionRunsMillis 为正数时才有意义。
+    # 【可选，JedisPoolConfig 默认值通常是 1000L * 60L * 30L，即30分钟】
+    minEvictableIdleTimeMillis: 60000 # 例如，空闲超过1分钟的连接可能被驱逐
+
+    # numTestsPerEvictionRun: 在每次空闲连接驱逐线程运行时，进行有效性检查的最大连接数量。
+    # 如果设置为 -1，则表示检查所有空闲连接。
+    # 此设置只有在 timeBetweenEvictionRunsMillis 为正数时才有意义。
+    # 【可选，JedisPoolConfig 默认值通常是 3】
+    numTestsPerEvictionRun: 3
