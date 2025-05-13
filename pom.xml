@@ -12,6 +12,30 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Dependency Versions -->
+        <snakeyaml.version>2.4</snakeyaml.version>
+        <sshd.version>2.15.0</sshd.version>
+        <bcprov.version>1.80</bcprov.version>
+        <jedis.version>5.2.0</jedis.version>
+        <jackson.version>2.17.2</jackson.version>
+        <zt-exec.version>1.12</zt-exec.version>
+        <lombok.version>1.18.38</lombok.version>
+        <oshi.version>6.8.0</oshi.version>
+        <jna.version>5.13.0</jna.version>
+        <logback.version>1.5.13</logback.version>
+        <junit.version>RELEASE</junit.version>
+
+        <!-- Plugin Versions -->
+        <maven-jar-plugin.version>3.3.0</maven-jar-plugin.version>
+        <maven-surefire-plugin.version>3.3.0</maven-surefire-plugin.version>
+        <maven-assembly-plugin.version>3.6.0</maven-assembly-plugin.version>
+        <dockerfile-maven-plugin.version>1.4.13</dockerfile-maven-plugin.version>
+
+        <!-- Docker配置 -->
+        <docker.image.prefix>hedeoer</docker.image.prefix>
+        <docker.image.name>agent</docker.image.name>
+        <docker.image.tag>1.0.0</docker.image.tag>
     </properties>
 
     <dependencies>
@@ -20,13 +44,13 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>2.4</version>
+            <version>${snakeyaml.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.sshd</groupId>
             <artifactId>sshd-common</artifactId>
-            <version>2.15.0</version>
+            <version>${sshd.version}</version>
             <exclusions>
                 <!-- 排除 slf4j-api 依赖 -->
                 <exclusion>
@@ -40,7 +64,7 @@
         <dependency>
             <groupId>org.apache.sshd</groupId>
             <artifactId>sshd-core</artifactId>
-            <version>2.15.0</version>
+            <version>${sshd.version}</version>
             <exclusions>
                 <!-- 排除 slf4j-api 依赖 -->
                 <exclusion>
@@ -54,7 +78,7 @@
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
-            <version>1.80</version>
+            <version>${bcprov.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/redis.clients/jedis -->
@@ -62,7 +86,7 @@
         <dependency>
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
-            <version>5.2.0</version>
+            <version>${jedis.version}</version>
             <exclusions>
                 <!-- 排除 slf4j-api 依赖 -->
                 <exclusion>
@@ -76,14 +100,14 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.17.2</version>
+            <version>${jackson.version}</version>
         </dependency>
 
         <!--执行shell命令-->
         <dependency>
             <groupId>org.zeroturnaround</groupId>
             <artifactId>zt-exec</artifactId>
-            <version>1.12</version>
+            <version>${zt-exec.version}</version>
             <exclusions>
                 <!-- 排除 slf4j-api 依赖 -->
                 <exclusion>
@@ -98,7 +122,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.38</version>
+            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
 
@@ -106,7 +130,7 @@
         <dependency>
             <groupId>com.github.oshi</groupId>
             <artifactId>oshi-core</artifactId>
-            <version>6.8.0</version>
+            <version>${oshi.version}</version>
             <exclusions>
                 <!-- 排除 slf4j-api 依赖 -->
                 <exclusion>
@@ -116,27 +140,27 @@
             </exclusions>
         </dependency>
         <!-- JNA 依赖 (OSHI需要这些) -->
-        <dependency>
+<!--        <dependency>
             <groupId>net.java.dev.jna</groupId>
             <artifactId>jna</artifactId>
-            <version>5.13.0</version>
+            <version>${jna.version}</version>
         </dependency>
         <dependency>
             <groupId>net.java.dev.jna</groupId>
             <artifactId>jna-platform</artifactId>
-            <version>5.13.0</version>
-        </dependency>
+            <version>${jna.version}</version>
+        </dependency>-->
 
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.13</version>
+            <version>${logback.version}</version>
         </dependency>
 
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>RELEASE</version>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -147,11 +171,14 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>3.3.0</version>
+                <version>${maven-jar-plugin.version}</version>
                 <configuration>
                     <archive>
                         <manifest>
                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>lib/</classpathPrefix>
+                            <mainClass>cn.hedeoer.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -160,9 +187,51 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.3.0</version>
+                <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+
+            <!-- 打包依赖 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>${maven-assembly-plugin.version}</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>cn.hedeoer.Main</mainClass>
+                        </manifest>
+                    </archive>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                    <finalName>${project.artifactId}-${project.version}-with-dependencies</finalName>
+                    <appendAssemblyId>false</appendAssemblyId>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Docker构建插件 -->
+            <plugin>
+                <groupId>com.spotify</groupId>
+                <artifactId>dockerfile-maven-plugin</artifactId>
+                <version>${dockerfile-maven-plugin.version}</version>
+                <configuration>
+                    <repository>${docker.image.prefix}/${docker.image.name}</repository>
+                    <tag>${docker.image.tag}</tag>
+                    <buildArgs>
+                        <JAR_FILE>target/${project.artifactId}-${project.version}-with-dependencies.jar</JAR_FILE>
+                    </buildArgs>
                 </configuration>
             </plugin>
         </plugins>

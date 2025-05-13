@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  agent:
+    image: hedeoer/agent:1.0.0
+    container_name: agent
+    restart: unless-stopped
+    ports:
+      - "2222:2222"
+    environment:
+      - RUNNING_IN_DOCKER=true
+      - SSH_SERVER_PORT=2222
+      - SSH_PUBLIC_KEY=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFnqcDG0yPisMvC9ehfSkzzrHa80n7YPAe6xv3bQMiDC H@DESKTOP-1AO4P84
+    volumes:
+      - ./logs:/root/logs
