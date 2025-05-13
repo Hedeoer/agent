@@ -147,7 +147,7 @@ download_jar_file() {
 
     log_info "开始下载 '$jar_filename' 从 '$jar_url' ..."
     # 使用 wget 下载， -O 指定输出文件名， -q 安静模式
-    if wget -q -O "$target_path" "$jar_url"; then
+    if wget --timeout=600 -q -O "$target_path" "$jar_url"; then
         log_info "Jar 文件 '$jar_filename' 下载成功，保存路径: $target_path"
         echo "$target_path" # 返回 Jar 文件完整路径
     else
