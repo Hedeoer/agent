@@ -8,7 +8,7 @@
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
 
     <!-- 日志文件存储路径 -->
-    <property name="LOG_FILE_PATH" value="${user.home}/logs/application"/>
+    <property name="LOG_FILE_PATH" value="${user.home}/agent/logs"/>
 
     <!-- 控制台输出 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

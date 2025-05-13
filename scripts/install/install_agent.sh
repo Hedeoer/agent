@@ -234,7 +234,7 @@ start_java_application() {
 
     # 使用 nohup 在后台运行，并将脚本层面的标准输出和标准错误重定向到脚本启动日志文件。
     # Java 应用本身的日志由其内部 Logback 配置管理。
-    nohup java -jar "$jar_path" > "$SCRIPT_STARTUP_LOG_FILE" 2>&1 &
+    sudo nohup java -Duser.home="$HOME" -jar "$jar_path" > "$SCRIPT_STARTUP_LOG_FILE" 2>&1 &
     local app_pid=$! # 获取最后一个后台进程的 PID
 
     log_info "等待程序启动 (PID: $app_pid)..."
