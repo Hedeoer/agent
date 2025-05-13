@@ -3,14 +3,12 @@ package cn.hedeoer.util;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.yaml.snakeyaml.Yaml;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.Protocol;
 import redis.clients.jedis.exceptions.JedisException;
 
-import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,26 +44,8 @@ public class RedisUtil{
             return;
         }
 
-        Yaml yaml = new Yaml();
-        InputStream inputStream = null; // 在try外部声明，以便finally可以访问
-
         try {
-            inputStream = RedisUtil.class.getClassLoader().getResourceAsStream(CONFIG_FILE_NAME);
-            if (inputStream == null) {
-                log.error("{} not found in classpath. Redis cannot be configured.", CONFIG_FILE_NAME);
-                initializationFailed = true;
-                return; // 中断加载
-            }
-
-            Map<String, Object> loadedYaml = yaml.load(inputStream);
-
-            if (loadedYaml == null || !(loadedYaml.get("redis") instanceof Map)) {
-                log.error("'{}' is missing 'redis' root key or it's not a map.", CONFIG_FILE_NAME);
-                initializationFailed = true;
-                return; // 中断加载
-            }
-
-            Map<String, Object> redisConfigMap = (Map<String, Object>) loadedYaml.get("redis");
+            Map<String, Object> redisConfigMap = YamlUtil.getYamlConfig("redis");
 
             // 必需的配置
             String host = getRequiredConfig(redisConfigMap, "host", String.class);
@@ -108,14 +88,6 @@ public class RedisUtil{
             if (jedisPool != null) {
                 try { jedisPool.destroy(); } catch (Exception ex) { log.warn("Exception destroying partially initialized pool", ex); }
                 jedisPool = null;
-            }
-        } finally {
-            if (inputStream != null) {
-                try {
-                    inputStream.close();
-                } catch (Exception ignored) {
-                    log.warn("Failed to close input stream for {}: {}", CONFIG_FILE_NAME, ignored.getMessage());
-                }
             }
         }
     }

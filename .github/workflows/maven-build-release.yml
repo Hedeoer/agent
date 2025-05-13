@@ -1,0 +1,62 @@
+name: Java CI with Maven and Release on Tag
+
+on:
+  push:
+    branches:
+      - main # 或者你的默认分支，例如 master
+  create: # 当标签被创建时触发
+    tags:
+      - 'v*' # 仅匹配以 'v' 开头的标签，例如 v1.0, v2.0.1
+
+permissions:
+  contents: write # 允许工作流创建 Release 并上传资产
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11' # 根据你的 pom.xml 中的 maven.compiler.source
+          distribution: 'temurin' # Temurin 是一个流行的 OpenJDK 发行版
+          cache: 'maven' # 缓存 Maven 依赖
+
+      - name: Extract Maven project version
+        id: project_version
+        run: |
+          # 从 pom.xml 中提取版本号并设置为输出变量
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # 从 pom.xml 中提取 artifactId
+          ARTIFACT_ID=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
+          echo "artifactId=$ARTIFACT_ID" >> $GITHUB_OUTPUT
+        # shell: bash # 确保在 bash 环境下运行，以便 $GITHUB_OUTPUT 正确工作
+
+      - name: Build with Maven
+        run: mvn -B package --file pom.xml
+        # -B 表示批处理模式
+        # 'package' 会执行编译、测试（如果 pom.xml 中未跳过）、打包
+        # 你的 pom.xml 中 maven-assembly-plugin 会生成 xxx-with-dependencies.jar
+
+      - name: Create Release and Upload JAR Asset
+        # 仅当事件是创建标签时才执行此步骤
+        if: github.event_name == 'create' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          # GITHUB_TOKEN 会自动提供
+          # files: target/${project.artifactId}-${project.version}-with-dependencies.jar
+          # 使用上一步提取的版本号和artifactId来构造文件名
+          files: target/${{ steps.project_version.outputs.artifactId }}-${{ steps.project_version.outputs.version }}-with-dependencies.jar
+          tag_name: ${{ github.ref_name }} # 使用触发工作流的标签名
+          name: Release ${{ github.ref_name }} # Release 的名称
+          body: |
+            Automated release for ${{ github.ref_name }}.
+            Contains the executable JAR file.
+          # draft: false # 设置为 true 则创建草稿 Release
+          # prerelease: false # 设置为 true 则标记为预发布版本
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
