@@ -106,7 +106,7 @@ get_jar_download_url() {
     local current_github_token
     current_github_token=$(get_github_token) # 获取 Token
 
-    log_info "正在从 GitHub 获取 '${REPO_OWNER}/${REPO_NAME}' 的最新 release 信息..."
+    log_info "正在从 GitHub 获取 '${REPO_OWNER}/${REPO_NAME}' 的最新 release 信息..." >&2
     local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
     local response
     response=$(curl -s -L \
@@ -131,7 +131,7 @@ get_jar_download_url() {
         log_error_exit "在最新的 release 中未找到名为 '${JAR_NAME_PREFIX}*.jar' 的资源文件。API响应(部分内容):\n$(echo "$response" | head -n 20)"
     fi
 
-    log_info "成功获取到 Jar 下载链接: $download_url"
+    log_info "成功获取到 Jar 下载链接: $download_url" >&2
     echo "$download_url" # 返回下载链接
 }
 
@@ -142,13 +142,14 @@ download_jar_file() {
     jar_filename=$(basename "$jar_url")
     local target_path="$AGENT_INSTALL_DIR/$jar_filename" # 使用绝对路径
 
-    log_info "准备下载 Jar 文件到: $target_path"
+    # 将日志输出重定向到标准错误
+    log_info "准备下载 Jar 文件到: $target_path" >&2
     # AGENT_INSTALL_DIR 的创建已在 main 函数中保证
 
-    log_info "开始下载 '$jar_filename' 从 '$jar_url' ..."
+    log_info "开始下载 '$jar_filename' 从 '$jar_url' ..." >&2
     # 使用 wget 下载， -O 指定输出文件名， -q 安静模式
-    if wget -q -O "$target_path" "$jar_url"; then
-        log_info "Jar 文件 '$jar_filename' 下载成功，保存路径: $target_path"
+    if wget --timeout=600 -q -O "$target_path" "$jar_url"; then
+        log_info "Jar 文件 '$jar_filename' 下载成功，保存路径: $target_path" >&2
         echo "$target_path" # 返回 Jar 文件完整路径
     else
         log_error_exit "下载 Jar 文件 '$jar_filename' 失败。请检查下载链接和网络。"
