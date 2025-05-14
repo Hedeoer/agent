@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # 脚本：安装并启动 Java Agent 程序
 # 功能：
 # 0. 检查 Java 版本 (>= 11)
@@ -19,10 +18,10 @@ SCRIPT_STARTUP_LOG_FILE="$AGENT_INSTALL_DIR/agent_script_startup.log"
 PID_FILE="$AGENT_INSTALL_DIR/agent.pid"
 
 # Java 应用通过 Logback 配置的日志文件路径 (基于用户提供的 Logback 配置)
-APP_LOG_BASE_DIR="$AGENT_INSTALL_DIR/logs" # Logback配置中的 ${user.home}/agent/logs
-APP_MAIN_LOG_FILE="$APP_LOG_BASE_DIR/logs.log" # 对应 <file>${LOG_FILE_PATH}.log</file>
-APP_ERROR_LOG_FILE="$APP_LOG_BASE_DIR/logs-error.log" # 对应 <file>${LOG_FILE_PATH}-error.log</file>
-
+APP_LOG_BASE_DIR="$AGENT_INSTALL_DIR/logs" # Logback配置中的 user.home/agent/logs
+# 以下路径将确保日志文件在 logs 目录下
+APP_MAIN_LOG_FILE="$APP_LOG_BASE_DIR/logs.log"       # 对应 <file>.../logs.log</file>
+APP_ERROR_LOG_FILE="$APP_LOG_BASE_DIR/logs-error.log" # 对应 <file>.../logs-error.log</file>
 # --- 函数定义 ---
 
 # 函数：记录信息
@@ -47,18 +46,16 @@ check_dependencies() {
     local missing_deps=0
     for cmd in curl jq java wget; do
         if ! command -v "$cmd" &> /dev/null; then
-            log_warn "依赖工具 '$cmd' 未安装。"
+            log_warn "命令 '$cmd' 未安装。"
             missing_deps=$((missing_deps + 1))
         fi
     done
-
     if [ "$missing_deps" -gt 0 ]; then
         log_error_exit "请先安装缺失的依赖工具 (curl, jq, java, wget) 后再运行脚本。"
     else
         log_info "所有依赖工具均已安装。"
     fi
 }
-
 
 # 0. 检查 Java 版本
 check_java_version() {
@@ -93,32 +90,36 @@ check_sudo_privileges() {
 
 # 函数：获取 GitHub Token
 get_github_token() {
-    if [ -z "${GH_AGENT_DOWNLOAD_TOKEN}" ]; then
-        log_error_exit "错误：环境变量 GH_AGENT_DOWNLOAD_TOKEN 未设置。\n请设置此变量为您的 GitHub Personal Access Token，用于下载 agent。\n例如: export GH_AGENT_DOWNLOAD_TOKEN='your_github_pat_here'"
-    fi
-    # 直接返回环境变量的值，因为如果未设置，上面已经退出了
-    echo "${GH_AGENT_DOWNLOAD_TOKEN}"
+    # 返回环境变量中的Token，如果未设置则返回空字符串
+    # 如果Token是必需的且未设置，后续的curl可能会失败，这由get_jar_download_url处理
+    echo "${GH_AGENT_DOWNLOAD_TOKEN:-}"
 }
 
 # 2. 获取 GitHub Release 的 Jar 下载链接
 get_jar_download_url() {
-
     local current_github_token
     current_github_token=$(get_github_token) # 获取 Token
 
     log_info "正在从 GitHub 获取 '${REPO_OWNER}/${REPO_NAME}' 的最新 release 信息..." >&2
     local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
     local response
-    response=$(curl -s -L \
-      -H "Accept: application/vnd.github+json" \
-      -H "Authorization: Bearer ${current_github_token}" \
-      -H "X-GitHub-Api-Version: 2022-11-28" \
-      --fail \
-      "${api_url}")
+    local headers=()
+    headers+=("Accept: application/vnd.github+json")
+    headers+=("X-GitHub-Api-Version: 2022-11-28")
+
+    if [ -n "$current_github_token" ]; then
+      headers+=("Authorization: Bearer ${current_github_token}")
+    else
+      log_warn "GH_AGENT_DOWNLOAD_TOKEN 未设置，将尝试匿名访问 GitHub API。"
+    fi
+
+    response=$(curl -s -L "${headers[@]/#/-H }" --fail "${api_url}")
     local curl_exit_code=$?
+
     if [ $curl_exit_code -ne 0 ]; then
         log_error_exit "获取 GitHub Release 信息失败。Curl 退出码: $curl_exit_code。请检查网络连接、仓库名称、Token 是否正确且有效。API URL: $api_url"
     fi
+
     if [ -z "$response" ]; then
         log_error_exit "获取 GitHub Release 信息失败，响应为空。"
     fi
@@ -211,7 +212,7 @@ start_java_application() {
     fi
 
     log_info "准备启动 Java 程序: $jar_filename"
-    log_info "Java 应用程序日志将由其内部 Logback 配置管理，预计路径:"
+    log_info "Java 应用程序日志将由其内部 Logback 配置管理，脚本期望的路径:"
     log_info "  - 主应用日志: $APP_MAIN_LOG_FILE"
     log_info "  - 错误应用日志: $APP_ERROR_LOG_FILE"
     log_info "脚本启动过程和 JVM 早期输出将记录到: $SCRIPT_STARTUP_LOG_FILE"
@@ -234,7 +235,7 @@ start_java_application() {
 
     # 使用 nohup 在后台运行，并将脚本层面的标准输出和标准错误重定向到脚本启动日志文件。
     # Java 应用本身的日志由其内部 Logback 配置管理。
-    sudo nohup java -Duser.home="$HOME" -jar "$jar_path" > "$SCRIPT_STARTUP_LOG_FILE" 2>&1 &
+    sudo nohup java -jar "$jar_path" > "$SCRIPT_STARTUP_LOG_FILE" 2>&1 &
     local app_pid=$! # 获取最后一个后台进程的 PID
 
     log_info "等待程序启动 (PID: $app_pid)..."
@@ -253,11 +254,11 @@ start_java_application() {
         # 简单检查 Logback 日志文件是否已生成（可选，但有助于确认）
         sleep 2 # 再等一下，确保文件系统同步
         if [ -f "$APP_MAIN_LOG_FILE" ] || [ -f "$APP_ERROR_LOG_FILE" ]; then
-            log_info "检测到 Logback 应用日志文件已生成或已存在。"
+            log_info "检测到 Logback 应用日志文件已生成或已存在于预期位置。"
         else
-            log_warn "Logback 管理的应用日志文件 ($APP_MAIN_LOG_FILE 或 $APP_ERROR_LOG_FILE) 尚未检测到。"
-            log_warn "这可能表示: a) 程序启动非常快且没有立即产生日志; b) Logback 配置存在问题; c) 程序未能正确初始化 Logback。"
-            log_warn "请务必检查 '$SCRIPT_STARTUP_LOG_FILE' 以获取可能的 JVM 启动错误。"
+            log_warn "Logback 管理的应用日志文件 ($APP_MAIN_LOG_FILE 或 $APP_ERROR_LOG_FILE) 尚未在预期位置检测到。"
+            log_warn "这可能表示: a) 程序启动非常快且没有立即产生日志; b) Logback 配置存在问题或未按预期使用路径; c) 程序未能正确初始化 Logback。"
+            log_warn "请务必检查 '$SCRIPT_STARTUP_LOG_FILE' 以获取可能的 JVM 启动错误, 并核对Java应用的Logback配置。"
         fi
     else
         log_error_exit "Java 程序 '$jar_filename' 启动失败。请检查脚本启动过程日志 '$SCRIPT_STARTUP_LOG_FILE' 获取详细错误信息 (例如 JVM 错误、类找不到等)。如果该文件为空或无有用信息，请检查 Java 程序代码及 Logback 配置。"
@@ -281,7 +282,15 @@ main() {
         log_info "Agent 安装目录 '$AGENT_INSTALL_DIR' 创建成功。"
     fi
 
-    # 所有关键路径已配置为绝对路径，无需 cd 操作
+    # APP_LOG_BASE_DIR 目录也在此处预先创建 (start_java_application 中也会检查/创建)
+    if [ ! -d "$APP_LOG_BASE_DIR" ]; then
+        log_info "Agent 日志基础目录 '$APP_LOG_BASE_DIR' 不存在，正在创建..."
+        if ! mkdir -p "$APP_LOG_BASE_DIR"; then
+            log_error_exit "创建 Agent 日志基础目录 '$APP_LOG_BASE_DIR' 失败。请检查权限。"
+        fi
+        log_info "Agent 日志基础目录 '$APP_LOG_BASE_DIR' 创建成功。"
+    fi
+
 
     local jar_download_url
     jar_download_url=$(get_jar_download_url)
