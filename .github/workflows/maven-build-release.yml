@@ -17,45 +17,113 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        # fetch-depth: 0 # 如果需要访问所有历史标签或完整历史记录，可以取消注释
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
         with:
           java-version: '11' # 根据你的 pom.xml 中的 maven.compiler.source
-          distribution: 'temurin' # Temurin 是一个流行的 OpenJDK 发行版
+          distribution: 'temurin'
           cache: 'maven' # 缓存 Maven 依赖
 
-      - name: Extract Maven project version
-        id: project_version
+      - name: Extract Maven project info and Git Tag Version
+        id: project_info # 重命名了步骤 ID
+        shell: bash # 确保在 bash 环境下运行
         run: |
-          # 从 pom.xml 中提取版本号并设置为输出变量
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          # 从 pom.xml 中提取 artifactId
+          POM_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "pom_version=$POM_VERSION" >> $GITHUB_OUTPUT
           ARTIFACT_ID=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
           echo "artifactId=$ARTIFACT_ID" >> $GITHUB_OUTPUT
-        # shell: bash # 确保在 bash 环境下运行，以便 $GITHUB_OUTPUT 正确工作
+
+          # 仅当创建标签时提取标签版本
+          if [[ "${{ github.event_name }}" == "create" && "${{ github.ref_type }}" == "tag" ]]; then
+            GIT_TAG="${{ github.ref_name }}" # 例如 v1.0.4
+            # 去除 'v' 前缀，例如 v1.0.4 -> 1.0.4
+            RELEASE_VERSION=${GIT_TAG#v}
+            echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+            echo "git_tag=$GIT_TAG" >> $GITHUB_OUTPUT
+            echo "Extracted Git Tag: $GIT_TAG, Release Version: $RELEASE_VERSION"
+          else
+            # 对于非标签事件（例如推送到 main 分支），设置一个默认值或空值
+            # Release 步骤在此情况下不会运行，所以这些值主要用于一致性
+            echo "release_version=$POM_VERSION" >> $GITHUB_OUTPUT # Fallback to POM version
+            echo "git_tag=" >> $GITHUB_OUTPUT
+            echo "Not a tag event. Using POM version: $POM_VERSION for release_version placeholder."
+          fi
 
       - name: Build with Maven
         run: mvn -B package --file pom.xml
         # -B 表示批处理模式
         # 'package' 会执行编译、测试（如果 pom.xml 中未跳过）、打包
-        # 你的 pom.xml 中 maven-assembly-plugin 会生成 xxx-with-dependencies.jar
+        # 假设 maven-assembly-plugin 会生成 target/${artifactId}-${pom.version}-with-dependencies.jar
+
+      - name: Rename JAR for Release (if on tag event)
+        # 仅当事件是创建标签时才执行此步骤
+        if: github.event_name == 'create' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          ARTIFACT_ID="${{ steps.project_info.outputs.artifactId }}"
+          # pom.xml中的版本号，例如 1.0.0 或 1.0.0-SNAPSHOT
+          POM_VERSION="${{ steps.project_info.outputs.pom_version }}"
+          # 从 Git Tag 提取的版本号（已去除'v'），例如 1.0.4
+          TAG_RELEASE_VERSION="${{ steps.project_info.outputs.release_version }}"
+          # JAR包的固定后缀，根据您原有的配置
+          ARTIFACT_SUFFIX="-with-dependencies.jar"
+
+          ORIGINAL_JAR_PATH="target/${ARTIFACT_ID}-${POM_VERSION}${ARTIFACT_SUFFIX}"
+          RENAMED_JAR_PATH="target/${ARTIFACT_ID}-${TAG_RELEASE_VERSION}${ARTIFACT_SUFFIX}"
+
+          echo "Original POM version: ${POM_VERSION}"
+          echo "Git Tag for release (derived): ${TAG_RELEASE_VERSION}"
+          echo "Expected original JAR path (from pom.xml version): ${ORIGINAL_JAR_PATH}"
+          echo "Target JAR path for release (from git tag): ${RENAMED_JAR_PATH}"
+
+          if [ "${POM_VERSION}" == "${TAG_RELEASE_VERSION}" ]; then
+            echo "POM version and Tag version (without 'v') are identical (${POM_VERSION})."
+            if [ -f "${ORIGINAL_JAR_PATH}" ]; then
+              echo "Artifact ${ORIGINAL_JAR_PATH} found. No rename needed as names would be the same."
+            else
+              echo "Error: Artifact ${ORIGINAL_JAR_PATH} not found, even though versions matched!"
+              ls -R target/
+              exit 1
+            fi
+          elif [ -f "${ORIGINAL_JAR_PATH}" ]; then
+            echo "Renaming ${ORIGINAL_JAR_PATH} to ${RENAMED_JAR_PATH}"
+            mv "${ORIGINAL_JAR_PATH}" "${RENAMED_JAR_PATH}"
+            if [ ! -f "${RENAMED_JAR_PATH}" ]; then
+                echo "Error: Rename failed. ${RENAMED_JAR_PATH} not found after mv."
+                ls -R target/
+                exit 1
+            fi
+            echo "Successfully renamed to ${RENAMED_JAR_PATH}."
+          else
+            # 如果原始JAR包（基于pom.xml版本）未找到，并且POM版本与Tag版本不同
+            echo "Warning: Original JAR ${ORIGINAL_JAR_PATH} (based on pom.xml version) not found."
+            echo "This might happen if the pom.xml version was already manually updated to match the tag version, or if the build produced a different name."
+            echo "Checking if the target release JAR ${RENAMED_JAR_PATH} already exists..."
+            if [ -f "${RENAMED_JAR_PATH}" ]; then
+              echo "Target release JAR ${RENAMED_JAR_PATH} already exists. Proceeding with this file."
+            else
+              echo "Error: Neither the original JAR (${ORIGINAL_JAR_PATH}) nor the target release JAR (${RENAMED_JAR_PATH}) found."
+              echo "Maven build might have failed or produced an artifact with an unexpected name."
+              ls -R target/
+              exit 1
+            fi
+          fi
 
       - name: Create Release and Upload JAR Asset
         # 仅当事件是创建标签时才执行此步骤
         if: github.event_name == 'create' && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         with:
-          # GITHUB_TOKEN 会自动提供
-          # files: target/${project.artifactId}-${project.version}-with-dependencies.jar
-          # 使用上一步提取的版本号和artifactId来构造文件名
-          files: target/${{ steps.project_version.outputs.artifactId }}-${{ steps.project_version.outputs.version }}-with-dependencies.jar
-          tag_name: ${{ github.ref_name }} # 使用触发工作流的标签名
-          name: Release ${{ github.ref_name }} # Release 的名称
+          # 使用上一步提取并可能重命名的文件名
+          # files 的路径现在使用从 Git Tag 提取的版本号 (release_version)
+          files: target/${{ steps.project_info.outputs.artifactId }}-${{ steps.project_info.outputs.release_version }}-with-dependencies.jar
+          tag_name: ${{ steps.project_info.outputs.git_tag }} # 使用触发工作流的标签名 (例如 v1.0.4)
+          name: Release ${{ steps.project_info.outputs.git_tag }} # Release 的名称
           body: |
-            Automated release for ${{ github.ref_name }}.
-            Contains the executable JAR file.
+            Automated release for ${{ steps.project_info.outputs.git_tag }}.
+            Contains the executable JAR file with version derived from the Git tag.
           # draft: false # 设置为 true 则创建草稿 Release
           # prerelease: false # 设置为 true 则标记为预发布版本
         env:
