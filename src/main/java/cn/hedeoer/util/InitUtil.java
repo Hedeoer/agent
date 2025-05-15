@@ -18,6 +18,8 @@ public class InitUtil {
 
         boolean result = true;
 
+        logger.info("当前节点唯一标识：>>>>>>>>>>>>>>>{}",AgentIdUtil.loadOrCreateUUID());
+
         // 系统用户权限
         if (!PingControlUtil.hasAdminPrivileges()) {
             logger.error("程序执行用户权限异常，要求具有免密管理员权限用户执行程序");
@@ -65,7 +67,6 @@ public class InitUtil {
                 System.exit(1);
             }
         }
-
         return result;
 
     }
