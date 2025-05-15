@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 public class InitUtil {
@@ -15,19 +16,37 @@ public class InitUtil {
 
     public static Boolean init() {
 
-        Boolean result = true;
+        boolean result = true;
 
         // 系统用户权限
         if (!PingControlUtil.hasAdminPrivileges()) {
+            logger.error("程序执行用户权限异常，要求具有免密管理员权限用户执行程序");
             System.exit(1);
 
         }
 
         // 启动apache mina sshd服务端
-        Integer defaultSshServerPort = 2222;
-        String needCheckPublicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFnqcDG0yPisMvC9ehfSkzzrHa80n7YPAe6xv3bQMiDC H@DESKTOP-1AO4P84";
-        SimpleSshServerWithPublicKeyAuth sshServer = new SimpleSshServerWithPublicKeyAuth(2222,needCheckPublicKey);
+        boolean runningInDocker = Boolean.parseBoolean(System.getenv("RUNNING_IN_DOCKER"));
+        Integer sshServerPort = null;
+        String sshPublicKey = null;
+        // 通过程序执行的方式读取ssh需要的所需配置
+        // docker从系统环境读取；其他运行方式从程序配置文件读取
+        if (runningInDocker) {
+            sshServerPort = Integer.parseInt(System.getenv("SSH_SERVER_PORT"));
+            sshPublicKey = System.getenv("SSH_PUBLIC_KEY");
+        }else{
+            Map<String, Object> sshConfigMap = YamlUtil.getYamlConfig("ssh");
+            sshServerPort = (Integer)sshConfigMap.get("ssh_server_port");
+            sshPublicKey = sshConfigMap.get("ssh_public_key").toString();
+        }
+        if (sshServerPort == null || sshPublicKey == null) {
+            logger.error("ssh所需的配置项: ssh_server_port:{}, ssh_public_key:{} 异常",sshServerPort,sshPublicKey);
+            System.exit(1);
+
+        }
+        SimpleSshServerWithPublicKeyAuth sshServer = new SimpleSshServerWithPublicKeyAuth(sshServerPort,sshPublicKey);
         if (!sshServer.startSshServer()) {
+            logger.error("无法启动ssh服务");
             System.exit(1);
         }
 
