@@ -16,43 +16,49 @@ import java.util.stream.Collectors;
  */
 public class PortMonitorUtils {
 
+
     /**
-     * 获取指定端口范围内的所有端口使用情况。
+     * 获取指定端口范围内的所有被监听的端口使用情况。
      * <p>
-     * 此方法通过 OSHI 库查询指定端口范围内的 TCP 和 UDP 连接，收集每个端口的占用情况，
-     * 包括协议、端口号、关联进程的名称、进程 ID、命令行以及监听的 IP 地址。
-     * 对于每个 (protocol, portNumber) 组合，仅保留信息最完整的一条记录（基于 PortInfo 的信息完整度评分）。
+     * 此方法通过 OSHI 库查询指定端口范围内的 TCP (LISTEN state) 和 UDP 连接，
+     * 收集每个端口的占用情况，包括协议、端口号、关联进程的名称、进程 ID、
+     * 命令行、监听的 IP 地址以及地址族 (IPv4/IPv6)。
+     * 对于每个 (protocol, portNumber, family) 组合，仅保留信息最完整的一条记录。
      * </p>
      *
-     * @param startPort 起始端口号（包含）。必须为非负数且不大于 endPort。
-     * @param endPort 结束端口号（包含）。必须为非负数且不超过 65535。
-     * @return 返回一个 PortInfo 列表，包含范围内所有被占用的端口信息。
-     *         列表中每个 (protocol, portNumber) 组合是唯一的。
-     *         如果没有端口被占用或范围无效，返回空列表。
+     * @param startPortStr 起始端口号（字符串，包含）。
+     * @param endPortStr 结束端口号（字符串，包含）。
+     * @return 返回一个 PortInfo 列表，包含范围内所有被占用的监听端口信息。
+     *         列表中每个 (protocol, portNumber, family) 组合是唯一的。
+     *         如果没有端口被监听或范围无效，返回空列表。
      *         <p>PortInfo 对象各属性的可能取值如下：</p>
      *         <ul>
-     *           <li><b>protocol</b>: 字符串，"tcp" 或 "udp"。</li>
-     *           <li><b>portNumber</b>: 整数，范围 [startPort, endPort]，例如 80、6379。</li>
-     *           <li><b>processName</b>: 字符串，进程名称（例如 "java"、"nginx"），可能为 ""（空字符串）或 null（取决于 oshi 实现）。</li>
-     *           <li><b>processId</b>: 整数，通常为正数（例如 1234），表示进程 ID；可能为 0（无关联进程，但通常不会创建 PortInfo）。</li>
-     *           <li><b>commandLine</b>: 字符串，进程的命令行（例如 "/usr/bin/java -jar app.jar"），可能为 "" 或 null（取决于 oshi 实现）。</li>
-     *           <li><b>listenAddress</b>: 字符串，格式化的 IP 地址（例如 IPv4: "192.168.1.1"，IPv6: "2001:0db8:85a3:0000:0000:8a2e:0370:7334"），或 "unknown"（地址不可用），或十六进制字符串（未知格式，例如 "0a000001"）。</li>
+     *           <li><b>protocol</b>: 字符串，固定为 "tcp" 或 "udp"。</li>
+     *           <li><b>portNumber</b>: 整数，范围在 [startPort, endPort] 内。</li>
+     *           <li><b>processName</b>: 字符串，进程名称（例如 "java", "sshd"）。如果进程信息不可用（如权限不足、进程已退出），则可能为 "Unknown"；对于某些系统级任务，可能为 "System"；如果OSHI未提供，则为空字符串 ""。</li>
+     *           <li><b>processId</b>: 整数，进程 ID。通常为正数。如果 OSHI 无法确定所属进程（例如权限不足），则为 -1。对于某些系统级监听，PID 可能为 0。</li>
+     *           <li><b>commandLine</b>: 字符串，进程的完整命令行。如果进程信息不可用或无相关命令行（例如 "System" 或 "Unknown" 状态的进程），则为空字符串 ""。</li>
+     *           <li><b>listenAddress</b>: 字符串，监听的 IP 地址。例如 IPv4 的 "0.0.0.0"（监听所有 IPv4）、"127.0.0.1"，或 IPv6 的 "::"（监听所有 IPv6）、"fe80::1"。如果地址信息无效或无法解析，则可能为 "unknown" 或 "invalid_address_bytes"。</li>
+     *           <li><b>family</b>: 字符串，表示地址族，值为 ipv4 或 ipv6。</li>
      *         </ul>
      * @throws IllegalArgumentException 如果 startPort 大于 endPort 或端口范围无效。
      */
-    public static List<PortInfo> getPortsUsage(String startPort, String endPort) {
+    public static List<PortInfo> getPortsUsage(String startPortStr, String endPortStr) {
 
-        if ((startPort == null || startPort.isEmpty()) || (endPort == null || endPort.isEmpty())) {
-            return Collections.EMPTY_LIST;
+        if ((startPortStr == null || startPortStr.isEmpty()) || (endPortStr == null || endPortStr.isEmpty())) {
+            return Collections.emptyList();
         }
 
-        if (!startPort.matches("-?\\d+") || !endPort.matches("-?\\d+")) {
-            return Collections.EMPTY_LIST;
+        // 仅允许数字
+        if (!startPortStr.matches("\\d+") || !endPortStr.matches("\\d+")) {
+            System.err.println("端口号必须是正整数。");
+            return Collections.emptyList();
         }
 
-        int start = Integer.parseInt(startPort);
-        int end = Integer.parseInt(endPort);
-        if (start > end || start < 0 || end > 65535) {
+        int startPort = Integer.parseInt(startPortStr);
+        int endPort = Integer.parseInt(endPortStr);
+
+        if (startPort > endPort || startPort < 0 || endPort > 65535) {
             throw new IllegalArgumentException("端口范围无效：起始端口必须小于或等于结束端口，且范围在 [0, 65535]");
         }
 
@@ -60,50 +66,117 @@ public class PortMonitorUtils {
         OperatingSystem os = systemInfo.getOperatingSystem();
         InternetProtocolStats ipStats = os.getInternetProtocolStats();
 
-        // Map to store the best PortInfo for each (protocol, port) combination
+        // Map to store the best PortInfo for each (protocol, port, family) combination
         Map<String, PortInfo> portInfoMap = new HashMap<>();
-
-        // Get all TCP and UDP connections
         List<IPConnection> allConnections = ipStats.getConnections();
 
         for (IPConnection conn : allConnections) {
             int localPort = conn.getLocalPort();
 
-            if (localPort >= start && localPort <= end) {
-                // Determine protocol (TCP or UDP)
-                String protocol = conn.getType().contains("tcp") ? "tcp" : "udp";
-                // Create composite key for (protocol, portNumber)
-                String key = protocol + ":" + localPort;
+            if (localPort >= startPort && localPort <= endPort) {
+                String oshiType = conn.getType(); // "tcp4", "tcp6", "udp4", "udp6"
+                String determinedProtocol;
+                String determinedFamily;
 
-                int pid = conn.getowningProcessId();
-                String listenAddress = formatAddress(conn.getLocalAddress());
-                OSProcess process = pid > 0 ? os.getProcess(pid) : null;
+                // Determine protocol and family
+                if ("tcp4".equals(oshiType)) {
+                    determinedProtocol = "tcp";
+                    determinedFamily = "ipv4";
+                } else if ("tcp6".equals(oshiType)) {
+                    determinedProtocol = "tcp";
+                    determinedFamily = "ipv6";
+                } else if ("udp4".equals(oshiType)) {
+                    determinedProtocol = "udp";
+                    determinedFamily = "ipv4";
+                } else if ("udp6".equals(oshiType)) {
+                    determinedProtocol = "udp";
+                    determinedFamily = "ipv6";
+                } else {
+                    // Should not happen with current LinuxInternetProtocolStats implementation
+                    // System.err.println("未知 OSHI 连接类型: " + oshiType);
+                    continue;
+                }
+
+                // --- Filter for listening ports ---
+                boolean isListening = false;
+                if ("tcp".equals(determinedProtocol)) {
+                    // For TCP, only consider ports in LISTEN state
+                    if (conn.getState() == InternetProtocolStats.TcpState.LISTEN) {
+                        isListening = true;
+                    }
+                } else { // For UDP
+                    // UDP is connectionless. Sockets in /proc/net/udp are bound and can receive.
+                    // We consider all UDP entries in the port range as "listening".
+                    // A more stringent check might involve foreign address being 0.0.0.0/:: and foreign port 0,
+                    // but OSHI already provides these as distinct entries.
+                    isListening = true;
+                }
+
+                if (!isListening) {
+                    continue; // Skip non-listening TCP connections or other undesired states
+                }
+                // --- End filter ---
+
+
+                // Create composite key for (protocol, portNumber, family)
+                String key = determinedProtocol + ":" + localPort + ":" + determinedFamily;
+
+                int pid = conn.getowningProcessId(); // Javadoc says -1 if unknown, Linux impl uses -1 as default
+                String listenAddressStr = formatAddress(conn.getLocalAddress());
+                OSProcess process = pid > 0 ? os.getProcess(pid) : null; // Only query if PID is positive
+
+                String processName = "";
+                String commandLine = "";
 
                 if (process != null) {
-                    String processName = process.getName();
-                    String commandLine = process.getCommandLine();
-
-                    PortInfo newInfo = PortInfo.builder()
-                            .protocol(protocol)
-                            .portNumber(localPort)
-                            .processName(processName != null ? processName : "")
-                            .processId(pid)
-                            .commandLine( commandLine!= null ? simplifyCommandLine(commandLine) : "")
-                            .listenAddress(listenAddress)
-                            .build();
-
-                    // Update if no existing info or new info is more complete
-                    portInfoMap.compute(key, (k, existingInfo) -> {
-                        if (existingInfo == null) {
-                            return newInfo;
-                        }
-                        return newInfo.gainInfoCompletenessScore() > existingInfo.gainInfoCompletenessScore()
-                                ? newInfo : existingInfo;
-                    });
+                    processName = process.getName();
+                    commandLine = process.getCommandLine();
+                } else if (pid <= 0) { // PID is 0, -1 or some other non-positive: system process or unknown
+                    processName = (pid == 0) ? "System" : "Unknown";
+                    // commandLine remains ""
                 }
+
+
+                PortInfo newInfo = PortInfo.builder()
+                        .protocol(determinedProtocol)
+                        .portNumber(localPort)
+                        .processName(processName != null ? processName : "")
+                        .processId(pid) // Store the original PID, even if <= 0
+                        .commandLine(commandLine != null ? simplifyCommandLine(commandLine) : "")
+                        .listenAddress(listenAddressStr)
+                        .family(determinedFamily)
+                        .build();
+
+                // Update if no existing info or new info is more complete
+                // Ensure PortInfo has gainInfoCompletenessScore() implemented
+                portInfoMap.compute(key, (k, existingInfo) -> {
+                    // 1. 如果 map 中还没有这个 key (即没有关于这个端口的记录)
+                    if (existingInfo == null) {
+                        // 那么直接使用新获取到的 PortInfo 对象 (newInfo) 作为这个 key 的值
+                        return newInfo;
+                    }
+
+                    // 2. 如果 map 中已经存在这个 key (即之前已经记录过这个端口的信息)
+                    //    这通常不应该发生，因为我们对 LISTEN 状态的端口，(protocol, port, family) 应该是唯一的。
+                    //    但如果因为某些特殊情况（例如，OSHI返回了重复的监听条目，或者我们的key不够唯一）
+                    //    或者如果这个逻辑被用于非LISTEN状态的连接（但我们之前的过滤应该是处理了这一点），
+                    //    我们就需要决定是保留旧的 (existingInfo) 还是用新的 (newInfo) 替换它。
+                    //    这里的策略是：比较哪个 PortInfo 对象的信息更“完整”。
+
+                    //    调用 PortInfo 对象上的一个方法 gainInfoCompletenessScore() 来获取一个“信息完整度评分”。
+                    //    这个评分越高，代表信息越完整（例如，有PID、有进程名、有命令行等）。
+                    if (newInfo.gainInfoCompletenessScore() > existingInfo.gainInfoCompletenessScore()) {
+                        // 如果新获取的 PortInfo (newInfo) 比已存在的 (existingInfo) 更完整，
+                        // 就返回 newInfo，这样 map 中 key 对应的值就会被更新为 newInfo。
+                        return newInfo;
+                    } else {
+                        // 否则 (如果 existingInfo 更完整或两者一样完整)，
+                        // 就返回 existingInfo，保持 map 中原有的记录不变。
+                        return existingInfo;
+                    }
+                });
             }
         }
-
         return new ArrayList<>(portInfoMap.values());
     }
 
@@ -228,7 +301,7 @@ public class PortMonitorUtils {
      * @param protocol 协议 （tcp, udp, tcp/udp 正常情况有三种取值情况）
      * @return 所有端口都未被使用，为空列表；端口中有端口被使用，正在被使用端口
      */
-    public static List<PortInfo> getPortsInUse(String port,String protocol) {
+    public static List<PortInfo> getPortsInUse(String port, String protocol) {
 
         // 存储最终的查询结果
         ArrayList<PortInfo> result = new ArrayList<>();

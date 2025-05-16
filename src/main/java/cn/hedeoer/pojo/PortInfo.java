@@ -3,8 +3,6 @@ package cn.hedeoer.pojo;
 import cn.hedeoer.util.AgentIdUtil;
 import lombok.*;
 
-import java.util.Objects;
-
 /**
  * 端口信息实体类
  */
@@ -21,10 +19,11 @@ public class PortInfo {
     private Integer processId;           // 进程ID
     private String commandLine;      // 完整命令行
     private String listenAddress;    // 监听地址
+    private String family;           // 监听的ipv4 or ipv6
 
 
     // 每个PortInfo对象的agentId是唯一的
-    public PortInfo(String agentId,String protocol, Integer portNumber, String processName, Integer processId, String commandLine, String listenAddress) {
+    public PortInfo(String agentId,String protocol, Integer portNumber, String processName, Integer processId, String commandLine, String listenAddress,String family) {
         this.agentId = AgentIdUtil.loadOrCreateUUID();
         this.protocol = protocol;
         this.portNumber = portNumber;
@@ -32,6 +31,7 @@ public class PortInfo {
         this.processId = processId;
         this.commandLine = commandLine;
         this.listenAddress = listenAddress;
+        this.family = family;
     }
 
     public PortInfo() {
@@ -43,6 +43,7 @@ public class PortInfo {
     // Helper method to determine information completeness
     public Integer gainInfoCompletenessScore() {
         int score = 0;
+        if(family != null && !family.isEmpty()) score += 3;
         if(protocol != null && !protocol.isEmpty()) score += 3;
         if (processName != null && !processName.isEmpty()) score += 2;
         if (commandLine != null && !commandLine.isEmpty()) score += 2;
