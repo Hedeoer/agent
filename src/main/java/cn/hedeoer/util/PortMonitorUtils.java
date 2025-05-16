@@ -8,6 +8,7 @@ import oshi.software.os.OSProcess;
 import oshi.software.os.OperatingSystem;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -143,6 +144,7 @@ public class PortMonitorUtils {
                         .processName(processName != null ? processName : "")
                         .processId(pid) // Store the original PID, even if <= 0
                         .commandLine(commandLine != null ? simplifyCommandLine(commandLine) : "")
+//                        .commandLine(commandLine)
                         .listenAddress(listenAddressStr)
                         .family(determinedFamily)
                         .build();
@@ -299,9 +301,10 @@ public class PortMonitorUtils {
      *
      * @param port 一些端口或者单个端口
      * @param protocol 协议 （tcp, udp, tcp/udp 正常情况有三种取值情况）
+     * @param family ip类型 （ipv4 ,ipv6 正常情况有两种取值情况）
      * @return 所有端口都未被使用，为空列表；端口中有端口被使用，正在被使用端口
      */
-    public static List<PortInfo> getPortsInUse(String port, String protocol) {
+    public static List<PortInfo> getPortsInUse(String port, String protocol,String family) {
 
         // 存储最终的查询结果
         ArrayList<PortInfo> result = new ArrayList<>();
@@ -334,7 +337,7 @@ public class PortMonitorUtils {
         String[] protocolTypes = protocol.split("/");
         for (String protocolType : protocolTypes) {
             for (PortInfo portInfo : portInfos) {
-                if (portInfo.getProtocol().equalsIgnoreCase(protocolType)) {
+                if (portInfo.getProtocol().equalsIgnoreCase(protocolType) && portInfo.getFamily().equalsIgnoreCase(family)) {
                     result.add(portInfo);
                 }
             }
@@ -367,68 +370,163 @@ public class PortMonitorUtils {
      * @param commandLine 原始命令
      * @return 简短字符命令
      */
-    private static String simplifyCommandLine(String commandLine) {
-        if (commandLine == null || commandLine.isEmpty()) return "";
+    public static String simplifyCommandLine(String commandLine) {
+        if (commandLine == null || commandLine.isEmpty()) {
+            return "";
+        }
 
         String[] parts = commandLine.trim().split("\\s+");
-        if (parts.length == 0) return "";
+        if (parts.length == 0) {
+            return "";
+        }
 
-        // 主程序名
-        String program = parts[0].substring(parts[0].lastIndexOf('/') + 1);
+        // 1. Determine the program/interpreter
+        String program = parts[0];
+        if (program.contains("/")) {
+            program = program.substring(program.lastIndexOf('/') + 1);
+        }
+        // Remove .exe suffix for consistency, e.g. java.exe -> java
+        if (program.toLowerCase().endsWith(".exe")) {
+            program = program.substring(0, program.length() - 4);
+        }
 
-        // Java特判可放前面（用之前的java逻辑），下方是通用部分
-        if ("java".equals(program)) {
-            // 1. 提取 -jar 后面的 jar 名
+        // Regex to identify a potential Java Fully Qualified Class Name
+        Pattern JAVA_FQCN_PATTERN = Pattern.compile(
+                // package.package.Class $ $内联类
+                "([a-zA-Z_][\\w$]*\\.)+[a-zA-Z_][\\w$]*"
+        );
+        // Regex to identify typical script files or modules
+        Pattern SCRIPT_OR_MODULE_PATTERN = Pattern.compile(
+                // script.py, module.submodule, script.sh, script.js etc. or just a name
+                // Allows dots and hyphens internally, starts with a letter or underscore, ends with alphanumeric or underscore
+                "^[a-zA-Z_][\\w.-]*[a-zA-Z0-9_]$"
+        );
+
+        // --------------------- Java Specific Simplification ---------------------
+        if ("java".equalsIgnoreCase(program)) {
+            // a. Check for -jar
             for (int i = 1; i < parts.length - 1; i++) {
-                if ("-jar".equals(parts[i])) {
-                    String jar = parts[i + 1];
-                    jar = jar.substring(jar.lastIndexOf('/') + 1);
-                    return "java " + jar;
+                if ("-jar".equalsIgnoreCase(parts[i]) && (i + 1 < parts.length)) {
+                    String jarName = parts[i + 1];
+                    if (jarName.contains("/")) {
+                        jarName = jarName.substring(jarName.lastIndexOf('/') + 1);
+                    }
+                    return "java -jar " + jarName;
                 }
             }
-            // 2. 从最后向前找最长右侧的主类（非-参数，且带.，且结尾有.Main可能更精确）
+
+            // b. Find Fully Qualified Class Name (usually the last argument that is a FQCN)
             for (int i = parts.length - 1; i >= 1; i--) {
-                if (!parts[i].startsWith("-") && !parts[i].startsWith("/")) {
-                    String mainClass = parts[i];
-                    int lastDot = mainClass.lastIndexOf('.');
-                    // 限制只显示最简单的 Main，如果没有点，则直接输出
-                    return "java " + (lastDot > 0 ? mainClass.substring(lastDot + 1) : mainClass);
+                String potentialFqcn = parts[i];
+                if (!potentialFqcn.startsWith("-") &&
+                        JAVA_FQCN_PATTERN.matcher(potentialFqcn).matches() &&
+                        !potentialFqcn.endsWith(".jar") && // Ensure it's not a jar listed as class
+                        !potentialFqcn.endsWith(".JAR")) {
+                    return "java " + potentialFqcn; // Keep FQCN
                 }
             }
-            // 兜底
-            return "java";
+            // Fallback for Java: if a single argument follows java and looks like a simple class name
+            if (parts.length == 2 && !parts[1].startsWith("-") && SCRIPT_OR_MODULE_PATTERN.matcher(parts[1]).matches()) {
+                return "java " + parts[1];
+            }
+            return "java"; // Ultimate fallback
         }
 
-        // 通用处理
+        // --------------------- Python Specific Simplification ---------------------
+        String lowerCaseProgram = program.toLowerCase();
+        if (lowerCaseProgram.startsWith("python")) { // Handles python, python3, python2.x etc.
+            // a. Check for -m (module)
+            for (int i = 1; i < parts.length - 1; i++) {
+                if ("-m".equalsIgnoreCase(parts[i]) && (i + 1 < parts.length)) {
+                    String moduleName = parts[i + 1];
+                    if (SCRIPT_OR_MODULE_PATTERN.matcher(moduleName).matches()) {
+                        return program + " -m " + moduleName;
+                    }
+                }
+            }
+            // b. Find script name (first non-option argument that looks like a script)
+            for (int i = 1; i < parts.length; i++) {
+                String potentialScript = parts[i];
+                if (!potentialScript.startsWith("-")) {
+                    if (potentialScript.contains("/")) {
+                        potentialScript = potentialScript.substring(potentialScript.lastIndexOf('/') + 1);
+                    }
+                    if (potentialScript.toLowerCase().endsWith(".py") ||
+                            SCRIPT_OR_MODULE_PATTERN.matcher(potentialScript).matches()) {
+                        return program + " " + potentialScript;
+                    }
+                }
+            }
+            return program; // Fallback
+        }
+
+        // --------------------- Node.js Specific Simplification ---------------------
+        if ("node".equalsIgnoreCase(program) || "nodejs".equalsIgnoreCase(program)) {
+            for (int i = 1; i < parts.length; i++) {
+                String potentialScript = parts[i];
+                if (!potentialScript.startsWith("-")) {
+                    if (potentialScript.contains("/")) {
+                        potentialScript = potentialScript.substring(potentialScript.lastIndexOf('/') + 1);
+                    }
+                    if (potentialScript.toLowerCase().endsWith(".js") ||
+                            SCRIPT_OR_MODULE_PATTERN.matcher(potentialScript).matches()) {
+                        return program + " " + potentialScript;
+                    }
+                }
+            }
+            return program; // Fallback
+        }
+
+        // --------------------- Shell interpreters (bash, sh, zsh, ksh, tcsh) ---------------------
+        if ("bash".equalsIgnoreCase(program) || "sh".equalsIgnoreCase(program) ||
+                "zsh".equalsIgnoreCase(program) || "ksh".equalsIgnoreCase(program) ||
+                "tcsh".equalsIgnoreCase(program) || "csh".equalsIgnoreCase(program) ) {
+            for (int i = 1; i < parts.length; i++) {
+                String potentialScript = parts[i];
+                if (!potentialScript.startsWith("-")) {
+                    if (potentialScript.contains("/")) {
+                        potentialScript = potentialScript.substring(potentialScript.lastIndexOf('/') + 1);
+                    }
+                    return program + " " + potentialScript;
+                }
+            }
+            return program; // Fallback
+        }
+
+        // --------------------- Generic Program (e.g., Go, C++, Rust binaries, or other scripts) ---------------------
         StringBuilder result = new StringBuilder(program);
-        boolean skipNext = false;
-        int nonOptionCount = 0;
+        if (parts.length > 1) {
+            String firstArg = parts[1];
+            boolean firstArgIsSubcommand = false;
 
-        for (int i = 1; i < parts.length && nonOptionCount < 2; i++) {
-            String p = parts[i];
-            // 1. 跳过参数
-            if (p.startsWith("-")) {
-                // 如果是 -m、-module、run 等，保留后面一个
-                if (p.equals("-m") || p.equals("run")) {
-                    skipNext = true;
+            if (!firstArg.startsWith("-")) {
+                // Inline isCommonSubcommand logic
+                String lowerArg = firstArg.toLowerCase();
+                switch(lowerArg) {
+                    case "server": case "serve": case "run": case "start": case "stop":
+                    case "restart": case "build": case "test": case "deploy": case "publish":
+                    case "get": case "install": case "update": case "status": case "push":
+                    case "pull": case "commit": case "add": case "create": case "delete":
+                    case "list": case "show": case "config":
+                        firstArgIsSubcommand = true;
+                        break;
+                    // no default needed, firstArgIsSubcommand remains false
                 }
-                continue;
+
+                if (firstArgIsSubcommand && firstArg.length() < 20) {
+                    result.append(" ").append(firstArg);
+                }
+                // If not a common subcommand, but looks like a script/module and is short
+                else if (SCRIPT_OR_MODULE_PATTERN.matcher(firstArg).matches() && firstArg.length() < 30) {
+                    result.append(" ").append(firstArg);
+                }
             }
-            // 2. 上一个参数要求保留本词
-            if (skipNext) {
-                result.append(" ").append(p);
-                nonOptionCount++;
-                skipNext = false;
-                continue;
-            }
-            // 3. 普通可疑是主文件/主脚本/主js/主py等
-            if (p.startsWith("/")) {
-                // 只保留文件名，去掉路径
-                p = p.substring(p.lastIndexOf('/') + 1);
-            }
-            result.append(" ").append(p);
-            nonOptionCount++;
         }
-        return result.toString().trim();
+        // Limit overall length for generic case
+        final int MAX_GENERIC_LENGTH = 60;
+        if (result.length() > MAX_GENERIC_LENGTH) {
+            return result.substring(0, MAX_GENERIC_LENGTH - 3) + "...";
+        }
+        return result.toString();
     }
 }

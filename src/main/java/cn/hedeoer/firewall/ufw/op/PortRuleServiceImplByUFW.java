@@ -177,7 +177,8 @@ public class PortRuleServiceImplByUFW implements PortRuleService {
             boolean isMultiProtocol = "tcp/udp".equals(protocol);
 
             //端口的使用状态
-            boolean using = PortMonitorUtils.isPortInUse(port);
+            boolean using = !PortMonitorUtils.getPortsInUse(port,protocol,family).isEmpty();
+//            boolean using = PortMonitorUtils.isPortInUse(port,protocol,family);
 
             // 该端口规则的策略 ufw中规则的策略有allow,deny,reject,limit
             // allow - 用于需要明确允许的服务和端口

@@ -33,17 +33,17 @@ public class PortMonitorUtilsTest {
 
     @Test
     public void isPortsInUse() {
-        System.out.println(PortMonitorUtils.getPortsInUse("9080,9081","tcp"));
-        System.out.println(PortMonitorUtils.getPortsInUse("8083-8084","tcp"));
-        System.out.println(PortMonitorUtils.getPortsInUse("6532","tcp"));
-        System.out.println(PortMonitorUtils.getPortsInUse("6533","tcp"));
-        System.out.println(PortMonitorUtils.getPortsInUse("","tcp"));
-        System.out.println(PortMonitorUtils.getPortsInUse("22","tcp"));
+        System.out.println(PortMonitorUtils.getPortsInUse("9080,9081","tcp","ipv4"));
+        System.out.println(PortMonitorUtils.getPortsInUse("8083-8084","tcp","ipv4"));
+        System.out.println(PortMonitorUtils.getPortsInUse("6532","tcp","ipv4"));
+        System.out.println(PortMonitorUtils.getPortsInUse("6533","tcp","ipv4"));
+        System.out.println(PortMonitorUtils.getPortsInUse("","tcp","ipv4"));
+        System.out.println(PortMonitorUtils.getPortsInUse("22","tcp","ipv4"));
     }
 
     @Test
     public void getUsedPortsAbove1024() {
         List<PortInfo> list = PortMonitorUtils.getUsedPortsAbove22();
-        list.stream().filter(l -> l.getPortNumber() == 22).forEach(System.out::println);
+        list.stream().filter(l -> l.getPortNumber() == 2222).forEach(System.out::println);
     }
 }

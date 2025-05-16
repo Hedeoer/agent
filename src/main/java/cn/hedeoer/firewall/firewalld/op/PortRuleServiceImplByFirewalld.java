@@ -1,7 +1,7 @@
 package cn.hedeoer.firewall.firewalld.op;
 
-import cn.hedeoer.common.entity.PortRule;
 import cn.hedeoer.common.enmu.RuleType;
+import cn.hedeoer.common.entity.PortRule;
 import cn.hedeoer.common.entity.SourceRule;
 import cn.hedeoer.firewall.PortRuleService;
 import cn.hedeoer.firewall.firewalld.exception.FirewallException;
@@ -639,7 +639,7 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
             for (FirewallRuleParser.ParsedRule parsedRule : parsedRules) {
 
                 // 获取端口目前是否被使用？
-                List<PortInfo> portsInUse = PortMonitorUtils.getPortsInUse(parsedRule.getPort(), parsedRule.getProtocol());
+                List<PortInfo> portsInUse = PortMonitorUtils.getPortsInUse(parsedRule.getPort(), parsedRule.getProtocol(),parsedRule.getFamily());
                 boolean using = !portsInUse.isEmpty();
 
                 // 该富规则是否是持久化的？
@@ -714,7 +714,7 @@ public class PortRuleServiceImplByFirewalld implements PortRuleService {
                 // 当端口规则中端口为单个端口，比如 (tcp 4567)，using属性为true，表示该机器tcp下该端口正在被使用；为false，表示机器tcp的4567端口未被使用
                 // 当端口规则为端口为多个端口，比如 tcp（3456-6543) 或者  udp[23423,553,774]）。using属性为true,表示机器tcp 的 3456-6543范围内有端口被使用了；为false,表示机器tcp 的 3456-6543范围内所有端口都未被占用
                 // 具体端口使用详细信息查看PortInfoAdapter类实现
-                List<PortInfo> portsInUse = PortMonitorUtils.getPortsInUse(port, protocol);
+                List<PortInfo> portsInUse = PortMonitorUtils.getPortsInUse(port, protocol,family);
                 boolean using = !portsInUse.isEmpty();
                 if (using) {
                     StringBuilder stringBuilder = new StringBuilder();
