@@ -31,16 +31,16 @@ public class InitUtil {
         boolean runningInDocker = Boolean.parseBoolean(System.getenv("RUNNING_IN_DOCKER"));
         Integer sshServerPort = null;
         String sshPublicKey = null;
-        // 通过程序执行的方式读取ssh需要的所需配置
-        // docker从系统环境读取；其他运行方式从程序配置文件读取
-        if (runningInDocker) {
-            sshServerPort = Integer.parseInt(System.getenv("SSH_SERVER_PORT"));
-            sshPublicKey = System.getenv("SSH_PUBLIC_KEY");
-        }else{
+        // 从环境变量中读取配置
+        sshPublicKey = System.getenv("SSH_PUBLIC_KEY");
+        sshServerPort = Integer.parseInt(System.getenv("SSH_SERVER_PORT"));
+        // 如果是非docker运行的方式并且环境变量中没有需要的环境变量设置，则从yaml配置中读取
+        if (!runningInDocker && sshPublicKey.isEmpty()) {
             Map<String, Object> sshConfigMap = YamlUtil.getYamlConfig("ssh");
             sshServerPort = (Integer)sshConfigMap.get("ssh_server_port");
-            sshPublicKey = sshConfigMap.get("ssh_public_key").toString();
+            sshPublicKey = (String)sshConfigMap.get("ssh_public_key");
         }
+
         if (sshServerPort == null || sshPublicKey == null) {
             logger.error("ssh所需的配置项: ssh_server_port:{}, ssh_public_key:{} 异常",sshServerPort,sshPublicKey);
             System.exit(1);

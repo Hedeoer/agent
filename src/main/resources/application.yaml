@@ -1,7 +1,9 @@
 # APACHE MINA SSH配置
 # ========================
 ssh:
+  # ssh服务的端口号
   ssh_server_port: 2222
+  # master节点的公钥，必须为ed25519类型
   ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFnqcDG0yPisMvC9ehfSkzzrHa80n7YPAe6xv3bQMiDC H@DESKTOP-1AO4P84"
 
 # Redis 连接与连接池配置

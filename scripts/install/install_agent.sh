@@ -6,7 +6,7 @@
 # 1. 检查免密 sudo 权限
 # 2. 从 GitHub Releases 获取最新的 agent jar 下载链接 (Token via -k argument)
 # 3. 下载 jar 文件到 ~/agent/ 目录 (使用固定名称并清理旧版本)
-# 4. 使用 nohup 启动 jar 文件并检查状态
+# 4. 使用 nohup 启动 jar 文件并检查状态 (同时设置 ssh_public_key 环境变量)
 
 # --- 配置区 ---
 REPO_OWNER="Hedeoer"
@@ -24,8 +24,10 @@ APP_LOG_BASE_DIR="$AGENT_INSTALL_DIR/logs"
 APP_MAIN_LOG_FILE="$APP_LOG_BASE_DIR/logs.log"
 APP_ERROR_LOG_FILE="$APP_LOG_BASE_DIR/logs-error.log"
 
-# Script-level variable to hold the GitHub token from CLI argument
+# Script-level variables to hold CLI arguments
 CLI_GITHUB_TOKEN=""
+CLI_SSH_PUBLIC_KEY="" # 用于存储master节点的 SSH 公钥
+SSH_SERVER_PORT="" # ssh服务器的绑定的进程端口号
 
 # --- 函数定义 ---
 
@@ -47,10 +49,12 @@ log_error_exit() {
 
 # 函数：显示用法
 usage() {
-    echo "用法: $0 -k <github_token>"
+    echo "用法: $0 -k <github_token> -s <ssh_public_key>"
     echo "选项:"
-    echo "  -k <token>   GitHub Personal Access Token，用于下载 agent (必需)"
-    echo "  -h           显示此帮助信息"
+    echo "  -k <token>         GitHub Personal Access Token，用于下载 agent (必需)"
+    echo "  -s <ssh_public_key>   Master节点的SSH 公钥字符串 (必需), 将作为环境变量 SSH_PUBLIC_KEY 传递给 Java 应用"
+    echo "  -p <ssh_server_port>   agent节点启动apache mina ssh服务时绑定的端口号(必需), 将作为环境变量 SSH_SERVER_PORT 传递给 Java 应用"
+    echo "  -h                 显示此帮助信息"
     exit 1
 }
 
@@ -219,6 +223,8 @@ start_java_application() {
     log_info "  - 错误应用日志: $APP_ERROR_LOG_FILE"
     log_info "脚本启动过程和 JVM 早期输出将记录到: $SCRIPT_STARTUP_LOG_FILE"
     log_info "PID 文件将创建在: $PID_FILE"
+    log_info "将为 Java 应用设置环境变量 SSH_PUBLIC_KEY"
+    log_info "将为 Java 应用设置环境变量 SSH_SERVER_PORT"
 
     if [ ! -d "$APP_LOG_BASE_DIR" ]; then
         log_info "Java 应用日志目录 '$APP_LOG_BASE_DIR' 不存在，正在尝试创建..."
@@ -229,7 +235,9 @@ start_java_application() {
         fi
     fi
 
-    sudo nohup java -jar "$jar_path" > "$SCRIPT_STARTUP_LOG_FILE" 2>&1 &
+    # 将 CLI_SSH_PUBLIC_KEY 的值作为环境变量 ssh_public_key 传递给 java 进程
+    # 使用 sudo VAR=value command 的方式确保环境变量通过 sudo 传递
+    sudo SSH_PUBLIC_KEY="${CLI_SSH_PUBLIC_KEY}" SSH_SERVER_PORT="${SSH_SERVER_PORT}" nohup java -jar "$jar_path" > "$SCRIPT_STARTUP_LOG_FILE" 2>&1 &
     local app_pid=$!
 
     log_info "等待程序启动 (PID: $app_pid)..."
@@ -238,6 +246,8 @@ start_java_application() {
     if ps -p "$app_pid" > /dev/null; then
         echo "$app_pid" > "$PID_FILE"
         log_info "Java 程序 '$jar_filename' 已作为后台进程启动，PID: $app_pid。"
+        log_info "环境变量 SSH_PUBLIC_KEY 已设置并传递给该进程。"
+        log_info "环境变量 SSH_SERVER_PORT 已设置并传递给该进程。"
         log_info "请检查以下日志文件获取运行状态和可能的错误:"
         log_info "  1. Java 应用主日志 (预期位置): $APP_MAIN_LOG_FILE"
         log_info "  2. Java 应用错误日志 (预期位置): $APP_ERROR_LOG_FILE"
@@ -261,13 +271,19 @@ start_java_application() {
 # --- 主逻辑 ---
 main() {
     # Parse command line options
-    # The leading colon in ":k:h" enables silent error handling by getopts.
+    # The leading colon in ":k:s:h" enables silent error handling by getopts.
     # getopts will set OPTARG to the option character if an argument is missing,
     # and opt to '?' if an unknown option is used.
-    while getopts ":k:h" opt; do
+    while getopts ":k:s:p:h" opt; do # 添加 s: 到 getopts 字符串
         case ${opt} in
             k )
                 CLI_GITHUB_TOKEN="$OPTARG"
+                ;;
+            s )
+                CLI_SSH_PUBLIC_KEY="$OPTARG"
+                ;;
+            p )
+                SSH_SERVER_PORT="$OPTARG"
                 ;;
             h )
                 usage
@@ -284,12 +300,21 @@ main() {
     done
     shift $((OPTIND -1)) # Remove parsed options from positional arguments
 
-    # Check if token was provided (now done in get_github_token, but an early check here is also good)
+    # 检查必需参数是否已提供
     if [ -z "${CLI_GITHUB_TOKEN}" ]; then
-        log_error_exit "错误：必须通过 -k <token> 参数提供 GitHub Token。\n$(usage)" # usage will exit
+        log_error_exit "错误：必须通过 -k <token> 参数提供 GitHub Token。\n$(usage)"
     fi
+    if [ -z "${CLI_SSH_PUBLIC_KEY}" ]; then
+        log_error_exit "错误：必须通过 -s <ssh_public_key> 参数提供 SSH 公钥。\n$(usage)"
+    fi
+    if [ -z "${SSH_SERVER_PORT}" ]; then
+            log_error_exit "错误：必须通过 -p <ssh_server_port> 参数提供 SSH服务启动占用的端口号。\n$(usage)"
+        fi
 
     log_info "--- Agent 安装与启动脚本开始 ---"
+    log_info "传入的 GitHub Token: [REDACTED]" # 不直接打印 token
+    log_info "传入的 SSH Public Key: ${CLI_SSH_PUBLIC_KEY:0:30}..."
+    log_info "传入的 SSH Server Port: ${SSH_SERVER_PORT:0:30}..."
 
     check_dependencies
     check_java_version
@@ -304,7 +329,7 @@ main() {
     fi
 
     local jar_download_url
-    jar_download_url=$(get_jar_download_url) # This will now use the token from CLI_GITHUB_TOKEN
+    jar_download_url=$(get_jar_download_url)
 
     local downloaded_jar_path
     downloaded_jar_path=$(download_jar_file "$jar_download_url")
